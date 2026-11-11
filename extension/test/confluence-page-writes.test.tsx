@@ -206,6 +206,19 @@ describe('create a published page', () => {
     expect(screen.getAllByText(/chosen parent is not in the requested Confluence space/).length).toBeGreaterThan(0)
     expect(writes(browser)).toEqual([])
   })
+
+  it('explains when the requested body exceeds the creation limit', async () => {
+    const { browser, user } = await openPanel()
+    browser.ai.script.push({ toolCalls: [createCall] })
+    await user.click(screen.getByRole('textbox', { name: 'Message' }))
+    await user.paste(`${command} with text "${'x'.repeat(40_001)}"`)
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    await answered()
+    expect(screen.getAllByText(/Shorten the requested page body to 40,000 characters or fewer/).length).toBeGreaterThan(
+      0,
+    )
+    expect(browser.workspaceRequests).toEqual([])
+  })
 })
 
 describe('rename a published page', () => {

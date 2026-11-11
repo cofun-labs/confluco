@@ -48,9 +48,7 @@ export function requestedPageWrite(message: string): PageWriteRequest | undefine
   const targetUrl = match.target
   if (!creation) return { action: 'rename', title: name.data, targetUrl }
   const spaceKey = match.space?.startsWith('"') ? match.space.slice(1, -1) : match.space
-  const body = match.text?.slice(1, -1) ?? ''
-  if (body.length > 40_000) return undefined
-  return { action: 'create', title: name.data, targetUrl, spaceKey, text: body }
+  return { action: 'create', title: name.data, targetUrl, spaceKey, text: match.text?.slice(1, -1) ?? '' }
 }
 
 function requestedReference(tab: ConfluenceTab, target: string | undefined): PageReference | undefined {
@@ -93,6 +91,8 @@ export async function preparePageWrite(
   current: ConfluenceTab | undefined,
   signal?: AbortSignal,
 ): Promise<PreparedCreate | PreparedRename> {
+  if (request.action === 'create' && request.text.length > 40_000)
+    refuse('Shorten the requested page body to 40,000 characters or fewer.')
   const tab = requireTab(current)
   const ref = requestedReference(tab, request.targetUrl)
   if (request.action === 'rename') {
