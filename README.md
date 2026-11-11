@@ -17,12 +17,13 @@
 |---|---|
 | Chat | Stream replies, stop a running answer, and start a new conversation. |
 | Read a page | Ask about the published page on a connected self-managed Confluence 8.5 instance. |
+| Search and browse | Find published pages by title or text and explore spaces, homepages, ancestors and children on the connected instance. |
 | Stay in context | Each question includes the current supported Confluence page's title and URL. |
 | Draft | Work with text you provide in the conversation. |
 | Keep sessions | Save conversations locally, search by title, filter by starting page, and continue earlier chats. |
 | Sign in | Use Google through the web sign-in page and keep the side panel in sync. |
 
-Searching, editing and comments are planned. Confluence Cloud pages currently provide title and link context.
+Editing and comments are planned. Confluence Cloud pages currently provide title and link context.
 
 ## Get started
 

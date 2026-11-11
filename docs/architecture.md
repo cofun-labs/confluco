@@ -9,7 +9,7 @@ Chrome
   Sign-in tab → Clerk Sync Host → side panel session
 ```
 
-The agent loop runs in the side panel. The Worker verifies the user and passes the conversation to the model. Each question includes the current supported Confluence page's title and canonical URL, read from Chrome's tab metadata. The first tool reads the published page on an explicitly connected self-managed instance.
+The agent loop runs in the side panel. The Worker verifies the user and passes the conversation to the model. Each question includes the current supported Confluence page's title and canonical URL, read from Chrome's tab metadata. Workspace tools can read a published page, search, and browse spaces and page trees on an explicitly connected self-managed instance.
 
 ## Tech choices
 
@@ -42,7 +42,7 @@ Conversations are saved in the extension's IndexedDB, one database per Clerk use
 
 ## Tool execution
 
-Tools register in `extension/src/tools.ts`. A tool's arguments, validation and JSON Schema come from one Zod schema through `defineTool`. The agent runs tools sequentially, streams their progress to the panel, supports per-call confirmation, and preserves completed tool history when a question is interrupted. Errors can stop a question and report whether data may have changed. The page-read tool captures the active tab and configured instance when the question is sent. Its transport runs a fixed same-origin REST read in the tab's isolated extension world. It checks the document still matches the captured URL, refuses redirects and validates the response before producing bounded plain text and a canonical link. Chrome site access is requested at connect time. Confluence cookies stay with the tab, and the selected page text goes to the model as a tool result.
+Tools register in `extension/src/tools.ts`. A tool's arguments, validation and JSON Schema come from one Zod schema through `defineTool`. The agent runs tools sequentially, streams their progress to the panel, supports per-call confirmation, and preserves completed tool history when a question is interrupted. Errors can stop a question and report whether data may have changed. The panel captures the active tab and configured instance when the question is sent. The shared transport uses that tab's isolated extension world for same-origin REST reads. It checks the document still matches the captured URL, refuses redirects and validates the transport result. Tools validate REST data, bound their output and generate canonical source links. Search and navigation use validated offsets to repeat the original request. Page references include the instance and page ID. Chrome site access is requested at connect time. Confluence cookies stay with the tab, and requested page text and search or navigation results go to the model as tool results.
 
 ## Layout
 
@@ -60,7 +60,9 @@ extension/                Chrome extension
   src/sessions.ts         saved sessions (IndexedDB, per user)
   src/confluence/tab.ts   Cloud and self-hosted URL recognition and per-question tab metadata
   src/confluence/instance.ts  configured base URL and optional Chrome site permission
-  src/confluence/read-page.ts  isolated-world REST transport for published pages
+  src/confluence/transport.ts  isolated-world REST transport bound to the captured tab and instance
+  src/confluence/read-page.ts  current published-page read
+  src/confluence/navigation.ts  search, space browsing and page hierarchy
   src/sidepanel/          React UI (main.tsx: sign-in, Chat.tsx: chat, Sessions.tsx: saved sessions,
                           ToolCall.tsx: one tool call and its changes)
   test/                   tests of client code and the whole panel in jsdom

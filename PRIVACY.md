@@ -6,6 +6,7 @@ Confluco opens an AI side panel on any website. This page describes what it read
 
 - **Page metadata.** The title and canonical URL of the active supported Confluence page are added to each question. Path parameters, fragments and query parameters are stripped, except the numeric page ID required by self-hosted viewpage links. The same metadata labels and filters saved sessions.
 - **Published page text.** When the assistant uses the read tool for a connected self-managed instance, it reads the current published page in the Confluence tab. It sends a bounded plain-text result, the title and a canonical link to the model as part of the conversation.
+- **Search and navigation results.** The assistant can search and browse the connected instance using your Confluence account. Matching titles, limited text excerpts, space names and keys, page hierarchy, and source links and IDs are included in the model conversation when used to answer a question.
 - **Your conversation.** Messages you type and the assistant's replies supply the context for the next question.
 - **Your sign-in session.** Clerk's Sync Host session cookies identify sign-in changes, and Clerk provides a short-lived session token for each Worker request.
 
@@ -17,10 +18,10 @@ The manifest's host permissions and content security policy enforce the configur
 
 | Host | What is sent | Purpose |
 |---|---|---|
-| Configured Worker API origin (`VITE_API_URL`) | Clerk token, messages, relevant history, page title and canonical URL, assistant instructions and tool definitions and results, including requested Confluence page text | Model access |
+| Configured Worker API origin (`VITE_API_URL`) | Clerk token, messages, relevant history, page title and canonical URL, assistant instructions and tool definitions and results, including requested Confluence page text, search matches and navigation results | Model access |
 | Clerk Frontend API encoded in `VITE_CLERK_PUBLISHABLE_KEY` | Clerk session and token requests | Account access and sign-in |
 | `img.clerk.com` | Avatar image requests | Account display |
-| User-connected Confluence base URL | Same-origin page read from the Confluence tab using that tab's session | Read the requested published page |
+| User-connected Confluence base URL | Same-origin read, search terms, space keys and page IDs requested from the Confluence tab using that tab's session | Read published pages, search and browse the connected instance |
 
 The extension also holds host permission for the Sync Host and its cookie domain. The parent-domain permission lets Chrome report the Clerk cookie that signals sign-in changes. It is used for cookie access. The extension sends no Confluence cookies or credentials to the Worker or Clerk. Cloudflare and Clerk see the connecting IP address as part of serving requests.
 
