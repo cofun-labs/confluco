@@ -73,6 +73,7 @@ export class FakeBrowser {
       location: new URL(tab.url),
       document: new DOMParser().parseFromString(tab.meta ?? '', 'text/html'),
       URL,
+      URLSearchParams,
       AbortSignal,
       AbortController,
       TextDecoder,

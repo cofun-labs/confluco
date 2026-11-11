@@ -26,6 +26,14 @@ async function ask(user: UserEvent, question: string) {
 /** The question has ended: the composer offers Send again. */
 const answered = () => screen.findByRole('button', { name: 'Send' })
 
+async function connect(user: UserEvent, base: string) {
+  await user.click(screen.getByRole('button', { name: 'Connect Confluence' }))
+  await user.type(await screen.findByLabelText('Confluence base URL'), base)
+  await user.click(screen.getByRole('button', { name: /^Connect$/ }))
+  await screen.findByText(`Connected to ${base}`)
+  await user.click(screen.getByRole('button', { name: 'Done' }))
+}
+
 /**
  * A model reply that stops partway until `resume` is called. The fake model streams each word as an
  * event of about 60 bytes, so it stops after the first two words.
@@ -290,14 +298,6 @@ describe('reading self-managed Confluence', () => {
     })
   const read = { name: 'read_page', arguments: '{}' }
 
-  async function connect(user: UserEvent, base: string) {
-    await user.click(screen.getByRole('button', { name: 'Connect Confluence' }))
-    await user.type(await screen.findByLabelText('Confluence base URL'), base)
-    await user.click(screen.getByRole('button', { name: /^Connect$/ }))
-    await screen.findByText(`Connected to ${base}`)
-    await user.click(screen.getByRole('button', { name: 'Done' }))
-  }
-
   it('[UC-CONFLUENCE-001-S01] reads the published page through the granted site and sends a source link', async () => {
     const browser = await FakeBrowser.start({
       signedInAs: 'user_alice',
@@ -502,4 +502,178 @@ describe('reading self-managed Confluence', () => {
     await answered()
     expect(browser.ai.calls).toHaveLength(1)
   })
+})
+
+describe('searching and browsing self-managed Confluence', () => {
+  const base = 'https://wiki.example.test/kb'
+  const page = (id: string, title: string) => ({ id, title, type: 'page', status: 'current' })
+  const space = { key: 'FIX', name: 'Fixture space' }
+  const ref = { instance: base, id: '42' }
+  const hit = {
+    content: page('42', 'Fixture page'),
+    excerpt: '<p>Useful @@@hl@@@fixture@@@endhl@@@ text.</p><script>Hidden</script>',
+  }
+  const call = (name: string, args: Record<string, unknown> = {}) => ({ name, arguments: JSON.stringify(args) })
+  const search = { query: 'fixture', spaceKey: 'FIX' }
+
+  async function navigationPanel(path = '/index.action') {
+    const browser = await FakeBrowser.start({ signedInAs: 'user_alice', tab: { url: base + path } })
+    await browser.openPanel()
+    const user = userEvent.setup()
+    await connect(user, base)
+    return { browser, user }
+  }
+
+  function toolResults(browser: FakeBrowser) {
+    return browser
+      .sentToModel()
+      .filter((message) => message.role === 'tool')
+      .map((message) => message.content)
+      .join('\n')
+  }
+
+  it.each(['text', 'title'])('[UC-CONFLUENCE-002-S01] finds published pages by %s', async (field) => {
+    const { browser, user } = await navigationPanel()
+    browser.confluenceResponse = () => Response.json({ results: [hit] })
+    browser.ai.script.push({ toolCalls: [call('search_pages', { ...search, field })] }, { reply: 'Found the fixture.' })
+    await ask(user, 'Find the fixture page')
+    expect(await screen.findByText('Found the fixture.')).toBeVisible()
+
+    expect(browser.workspaceRequests).toHaveLength(1)
+    const request = new URL(browser.workspaceRequests[0]!.url)
+    expect(request.pathname).toBe('/kb/rest/api/search')
+    expect(request.searchParams.get('cql')).toBe(`type = page AND ${field} ~ "fixture" AND space = "FIX"`)
+    expect(request.searchParams.get('limit')).toBe('10')
+    const results = toolResults(browser)
+    expect(results).toContain('Useful fixture text.')
+    expect(results).toContain(base + '/pages/viewpage.action?pageId=42')
+    expect(results).toContain(JSON.stringify(ref))
+    expect(results).not.toContain('Hidden')
+  })
+
+  it('[UC-CONFLUENCE-002-S02] gets the next results with the original search filters', async () => {
+    const { browser, user } = await navigationPanel()
+    browser.confluenceResponse = (url) =>
+      new URL(url).searchParams.get('start') === '0'
+        ? Response.json({ results: [hit], _links: { next: '/rest/api/search?start=10&limit=10' } })
+        : Response.json({ results: [{ content: page('43', 'Second page') }] })
+    browser.ai.script.push({ toolCalls: [call('search_pages', search)] }, { reply: 'First result.' })
+    await ask(user, 'Find the fixture')
+    expect(await screen.findByText('First result.')).toBeVisible()
+    expect(toolResults(browser)).toContain('"nextStart":10')
+    await answered()
+
+    browser.ai.script.push({ toolCalls: [call('search_pages', { ...search, start: 10 })] }, { reply: 'More matches.' })
+    await ask(user, 'More results')
+    expect(await screen.findByText('More matches.')).toBeVisible()
+    const requests = browser.workspaceRequests.map(({ url }) => new URL(url))
+    expect(requests.map((url) => url.pathname)).toEqual(['/kb/rest/api/search', '/kb/rest/api/search'])
+    expect(requests.map((url) => url.searchParams.get('start'))).toEqual(['0', '10'])
+    expect(requests[1]?.searchParams.get('cql')).toBe(requests[0]?.searchParams.get('cql'))
+    expect(toolResults(browser)).toContain(base + '/pages/viewpage.action?pageId=43')
+  })
+
+  it('[UC-CONFLUENCE-002-S03] returns an empty result when there are no visible matches', async () => {
+    const { browser, user } = await navigationPanel()
+    browser.confluenceResponse = () => Response.json({ results: [] })
+    browser.ai.script.push({ toolCalls: [call('search_pages', search)] }, { reply: 'No matching pages.' })
+    await ask(user, 'Find the fixture')
+    expect(await screen.findByText('No matching pages.')).toBeVisible()
+    expect(toolResults(browser)).toContain('{"results":[]}')
+  })
+
+  it('quotes search text so it cannot change the CQL page and space filters', async () => {
+    const { browser, user } = await navigationPanel()
+    browser.confluenceResponse = () => Response.json({ results: [] })
+    const query = String.raw`fixture\" OR space = "OTHER"`
+    browser.ai.script.push({ toolCalls: [call('search_pages', { ...search, query })] }, { reply: 'No matching pages.' })
+    await ask(user, 'Find this literal text in the fixture space')
+    expect(await screen.findByText('No matching pages.')).toBeVisible()
+    const request = new URL(browser.workspaceRequests[0]!.url)
+    expect(request.searchParams.get('cql')).toBe(
+      String.raw`type = page AND text ~ "fixture\\\" OR space = \"OTHER\"" AND space = "FIX"`,
+    )
+  })
+
+  it.each([
+    'https://unrelated.example.test/kb/rest/api/search?start=10',
+    '/other/rest/api/search?start=10',
+    '/kb/rest/api/space?start=10',
+    '/kb/rest/api/search?start=999999',
+    '/kb/rest/api/search?start=10&start=20',
+    '/kb/rest/api/search?start=0',
+  ])('does not expose an invalid next page target %s', async (next) => {
+    const { browser, user } = await navigationPanel()
+    browser.confluenceResponse = () => Response.json({ results: [hit], _links: { next } })
+    browser.ai.script.push({ toolCalls: [call('search_pages', search)] }, { reply: 'Found one fixture.' })
+    await ask(user, 'Find the fixture')
+    expect(await screen.findByText('Found one fixture.')).toBeVisible()
+    const results = toolResults(browser)
+    expect(results).toContain('invalid next page link')
+    expect(results).toContain('Fixture page')
+    expect(results).not.toContain('nextStart')
+    expect(results).not.toContain(next)
+    expect(browser.workspaceRequests).toHaveLength(1)
+  })
+
+  it('[UC-CONFLUENCE-003-S01] browses visible spaces and finds a selected space homepage', async () => {
+    const { browser, user } = await navigationPanel()
+    browser.confluenceResponse = (url) => {
+      if (new URL(url).pathname.endsWith('/space')) return Response.json({ results: [space] })
+      return Response.json({ ...space, homepage: page('42', 'Fixture home') })
+    }
+    browser.ai.script.push(
+      { toolCalls: [call('list_spaces')] },
+      { toolCalls: [call('get_space', { key: 'FIX' })] },
+      { reply: 'Fixture space homepage.' },
+    )
+    await ask(user, 'Find the fixture space and its homepage')
+    expect(await screen.findByText('Fixture space homepage.')).toBeVisible()
+    expect(browser.workspaceRequests.map(({ url }) => url)).toEqual([
+      base + '/rest/api/space?start=0&limit=10',
+      base + '/rest/api/space/FIX?expand=homepage',
+    ])
+    const results = toolResults(browser)
+    expect(results).toContain(base + '/display/FIX')
+    expect(results).toContain('Fixture home')
+    expect(results).toContain(base + '/pages/viewpage.action?pageId=42')
+  })
+
+  it.each([undefined, ref])('[UC-CONFLUENCE-003-S02] reads page hierarchy with reference %s', async (reference) => {
+    const { browser, user } = await navigationPanel('/pages/viewpage.action?pageId=42')
+    browser.confluenceResponse = (url) => {
+      if (new URL(url).pathname.endsWith('/child/page')) return Response.json({ results: [page('43', 'Child')] })
+      return Response.json({ ...hit.content, ancestors: [page('41', 'Parent')] })
+    }
+    browser.ai.script.push(
+      { toolCalls: [call('browse_page_tree', { page: reference })] },
+      { reply: 'Parent and child.' },
+    )
+    await ask(user, 'Where does this page sit?')
+    expect(await screen.findByText('Parent and child.')).toBeVisible()
+    expect(browser.workspaceRequests.map(({ url }) => url)).toEqual([
+      base + '/rest/api/content/42?expand=ancestors',
+      base + '/rest/api/content/42/child/page?start=0&limit=10',
+    ])
+    const results = toolResults(browser)
+    expect(results).toContain(base + '/pages/viewpage.action?pageId=41')
+    expect(results).toContain(base + '/pages/viewpage.action?pageId=43')
+  })
+
+  it.each([
+    [{ ...ref, instance: 'https://wiki.example.test/other' }, 'different Confluence instance', 0],
+    [ref, 'does not have permission', 1],
+  ])(
+    '[UC-CONFLUENCE-003-S03] refuses a foreign or inaccessible page reference',
+    async (reference, reason, requests) => {
+      const { browser, user } = await navigationPanel()
+      browser.confluenceResponse = () => new Response(null, { status: 403 })
+      browser.ai.script.push({ toolCalls: [call('browse_page_tree', { page: reference })] })
+      await ask(user, 'Read the page hierarchy')
+      await answered()
+      expect(screen.getAllByText(new RegExp(reason)).length).toBeGreaterThan(0)
+      expect(browser.workspaceRequests).toHaveLength(requests)
+      expect(browser.ai.calls).toHaveLength(1)
+    },
+  )
 })

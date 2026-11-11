@@ -78,7 +78,7 @@
           {
             "object": "chrome",
             "property": "scripting",
-            "message": "Only extension/src/confluence/read-page.ts injects the Confluence REST transport."
+            "message": "Only extension/src/confluence/transport.ts injects the Confluence REST transport."
           },
           {
             "object": "globalThis",
@@ -128,8 +128,8 @@
       }
     },
     {
-      // A published-page read runs in the Confluence tab and never calls the model Worker.
-      "files": ["extension/src/confluence/read-page.ts"],
+      // Confluence REST runs in the Confluence tab and never calls the model Worker.
+      "files": ["extension/src/confluence/transport.ts"],
       "rules": {
         "no-restricted-globals": "off",
         "no-restricted-properties": [
@@ -168,7 +168,7 @@
           {
             "object": "chrome",
             "property": "scripting",
-            "message": "Only extension/src/confluence/read-page.ts injects the Confluence REST transport."
+            "message": "Only extension/src/confluence/transport.ts injects the Confluence REST transport."
           }
         ]
       }

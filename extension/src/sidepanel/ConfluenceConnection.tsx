@@ -92,7 +92,10 @@ export function ConfluenceConnection({ userId, onClose }: { userId: string; onCl
             placeholder="https://wiki.example.com/confluence"
             required
           />
-          <p>Chrome will ask for site access. Page text you ask the assistant to read is shared with the AI model.</p>
+          <p>
+            Chrome will ask for site access. Requested page text, search results, and navigation details are shared with
+            the AI model.
+          </p>
           <button type="submit" disabled={busy}>
             Connect
           </button>

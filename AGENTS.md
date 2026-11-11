@@ -90,7 +90,7 @@ This is an open-source repository. **Never commit account identifiers or secrets
 
 - `extension/`: Chrome MV3 side panel. Vite + React + TypeScript. Clerk sign-in through Sync Host. `vite.config.ts` generates `manifest.json` from `.env.local`; checks use `.env.smoke`. The agent loop runs in the side panel on `@earendil-works/pi-agent-core`; only `src/agent.ts` imports pi, and tools live in `src/tools.ts`.
 - `worker/`: Cloudflare Worker with Hono. Serves `/login`, verifies Clerk session JWTs locally, and proxies OpenAI-compatible `/v1/chat/completions` to Workers AI through AI Gateway.
-- `extension/src/confluence/tab.ts` recognizes supported Cloud and self-hosted Confluence URLs and reads tab metadata for session labels and per-question context. The tool registry exposes the published-page read for explicitly connected self-managed instances.
+- `extension/src/confluence/tab.ts` recognizes supported Cloud and self-hosted Confluence URLs and reads tab metadata for session labels and per-question context. The tool registry exposes published-page reads, search and navigation for explicitly connected self-managed instances.
 - **Module boundaries are lint errors** in `.oxlintrc.json`. Only `src/agent.ts` imports pi and calls the Worker with `fetch`. Only `src/confluence/read-page.ts` uses `chrome.scripting` and sends Confluence REST requests. Extension source never uses `chrome.debugger`. Zod is imported through `extension/src/zod.ts` and `worker/src/zod.ts`, which set up each runtime. The Confluence layer imports nothing from the agent, tools, sessions or UI. Change the documented boundary and the lint rule together when a feature needs it. Never bypass a module boundary with an `oxlint-disable` comment.
 
 ## Untrusted values
