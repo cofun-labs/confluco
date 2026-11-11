@@ -30,7 +30,7 @@ export type PageWriteRequest =
   | { action: 'rename'; title: string; targetUrl?: string }
 
 const createEnglish =
-  /^(?:please\s+)?create\s+(?:a\s+)?(?:published\s+)?(?:child\s+)?page\s+(?:(?:called|named|titled)\s+)?(?<title>"[^"\r\n]+"|“[^”\r\n]+”|`[^`\r\n]+`)(?:\s+in\s+space\s+(?<space>"[^"]+"|[^\s]+))?\s+under\s+(?:this\s+page|(?<target>https?:\/\/[^\s]+))(?:\s+with\s+text\s+(?<text>"[^"]*"|“[^”]*”|`[^`]*`))?[.!]?$/iu
+  /^(?:please\s+)?create\s+(?:a\s+)?(?:published\s+)?(?:child\s+)?page\s+(?:(?:called|named|titled)\s+)?(?<title>"[^"\r\n]+"|“[^”\r\n]+”|`[^`\r\n]+`)(?:\s+in\s+space\s+(?<space>"[^"]+"|[^\s]+))?\s+under\s+(?:this\s+page|(?<target>https?:\/\/[^\s]+?))(?:\s+with\s+text\s+(?<text>"[^"]*"|“[^”]*”|`[^`]*`))?[.!]?$/iu
 const renameEnglish =
   /^(?:please\s+)?rename\s+(?:this\s+page|(?:page\s+)?(?<target>https?:\/\/[^\s]+))\s+to\s+(?<title>"[^"\r\n]+"|“[^”\r\n]+”|`[^`\r\n]+`)[.!]?$/iu
 const createChinese =

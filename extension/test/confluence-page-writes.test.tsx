@@ -106,22 +106,25 @@ describe('create a published page', () => {
     expect(modelResults(browser)).toContain('"version":1,"changed":true,"bodyVerified":true')
   })
 
-  it('[UC-CONFLUENCE-006-S02] reports an existing title without creating another page', async () => {
-    const { browser, user } = await openPanel()
-    browser.confluenceResponse = (url) => {
-      const endpoint = new URL(url)
-      if (endpoint.pathname !== contentPath) return Response.json(parent)
-      expect(endpoint.searchParams.get('title')).toBe(child.title)
-      expect(endpoint.searchParams.get('spaceKey')).toBe(parent.space.key)
-      return Response.json({ results: [child] })
-    }
-    browser.ai.script.push({ toolCalls: [createCall] }, { reply: 'The page already exists.' })
-    await ask(user, '请在当前页面下创建页面“Child fixture”')
-    expect(await screen.findByText('The page already exists.')).toBeVisible()
-    expect(modelResults(browser)).toContain('"changed":false,"alreadyExists":true')
-    expect(modelResults(browser)).toContain(pageUrl('99'))
-    expect(writes(browser)).toEqual([])
-  })
+  it.each(['请在当前页面下创建页面“Child fixture”', `Create page "Child fixture" under ${pageUrl('42')}.`])(
+    '[UC-CONFLUENCE-006-S02] reports an existing title without creating another page for %s',
+    async (message) => {
+      const { browser, user } = await openPanel()
+      browser.confluenceResponse = (url) => {
+        const endpoint = new URL(url)
+        if (endpoint.pathname !== contentPath) return Response.json(parent)
+        expect(endpoint.searchParams.get('title')).toBe(child.title)
+        expect(endpoint.searchParams.get('spaceKey')).toBe(parent.space.key)
+        return Response.json({ results: [child] })
+      }
+      browser.ai.script.push({ toolCalls: [createCall] }, { reply: 'The page already exists.' })
+      await ask(user, message)
+      expect(await screen.findByText('The page already exists.')).toBeVisible()
+      expect(modelResults(browser)).toContain('"changed":false,"alreadyExists":true')
+      expect(modelResults(browser)).toContain(pageUrl('99'))
+      expect(writes(browser)).toEqual([])
+    },
+  )
 
   it('keeps the planned change visible when the user opens Sessions before the write', async () => {
     const { browser, user } = await openPanel()
