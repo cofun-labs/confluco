@@ -9,7 +9,7 @@ const maxStart = 990
 const start = z.int().min(0).max(maxStart).default(0).describe('Omit on the first call. Use the returned nextStart.')
 const spaceKey = z
   .string()
-  .regex(/^(?:~[\w.@-]+|[a-zA-Z0-9][a-zA-Z0-9_-]*)$/)
+  .regex(/^(?:~[^\p{C}/\\%;?#]+|[a-zA-Z0-9][a-zA-Z0-9_-]*)$/u)
   .max(255)
 
 export const searchArgs = z.strictObject({
@@ -31,7 +31,7 @@ const spaceDetail = space.extend({ homepage: publishedPage.nullish() })
 const treePage = publishedPage.extend({ ancestors: z.array(publishedPage) })
 
 function cqlString(value: string): string {
-  return `"${value.replace(/\s+/g, ' ').replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
+  return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
 }
 
 function spaceLink(instance: Instance, value: z.infer<typeof space>) {
@@ -90,7 +90,7 @@ export async function searchPages(
 ) {
   const tab = requireTab(target)
   const spaceFilter = input.spaceKey ? ` AND space = ${cqlString(input.spaceKey)}` : ''
-  const cql = `type = page AND ${input.field} ~ ${cqlString(input.query)}${spaceFilter}`
+  const cql = `type = page AND ${input.field} ~ ${cqlString(input.query.replace(/\s+/g, ' '))}${spaceFilter}`
   const { items, ...next } = await collection(tab, 'search', { cql }, input.start, searchHit, signal)
   const results = items.map(({ content, excerpt }) => ({
     ...pageLink(tab.instance, content),

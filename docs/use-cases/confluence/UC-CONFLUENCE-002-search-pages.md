@@ -18,4 +18,4 @@ On a connected Confluence instance, the user can ask the assistant to find publi
 
 | ID | Priority | Status | Scenario |
 | --- | --- | --- | --- |
-| UC-CONFLUENCE-002-S04 | P1 | 🚧 | Given a published test page on a connected self-managed Confluence instance; when the user searches for its test content; then the assistant finds the page and provides its source link. |
+| UC-CONFLUENCE-002-S04 | P1 | ✅ | Given a published test page on a connected self-managed Confluence instance; when the user searches for its test content; then the assistant finds the page and provides its source link. |

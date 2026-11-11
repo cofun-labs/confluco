@@ -25,7 +25,18 @@ export function confluenceTab(
 const result = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('ok'), pageId: z.string().regex(/^\d+$/).optional(), data: z.unknown() }),
   z.object({
-    kind: z.enum(['changed', 'not-page', 'auth', 'forbidden', 'missing', 'limited', 'large', 'network', 'invalid']),
+    kind: z.enum([
+      'changed',
+      'not-page',
+      'auth',
+      'rejected',
+      'forbidden',
+      'missing',
+      'limited',
+      'large',
+      'network',
+      'invalid',
+    ]),
   }),
 ])
 
@@ -33,12 +44,13 @@ const errors = {
   changed: 'The Confluence tab changed. Open the intended page and ask again.',
   'not-page': 'Open a published Confluence page before asking Confluco to read it.',
   auth: 'Sign in to Confluence in the page tab, then ask again.',
-  forbidden: 'Your Confluence account does not have permission to read this page.',
-  missing: 'The Confluence page is missing or is not visible to your account.',
+  rejected: 'Confluence rejected the request. Check the search text, space key or page reference.',
+  forbidden: 'Your Confluence account does not have permission for this request.',
+  missing: 'The requested Confluence item is missing or is not visible to your account.',
   limited: 'Confluence rate-limited this request. Wait before asking again.',
   large: 'The Confluence response was too large to read.',
-  network: 'Could not read the page from Confluence. Check the site and try again.',
-  invalid: 'Confluence did not return the expected published page.',
+  network: 'Could not complete the request to Confluence. Check the site and try again.',
+  invalid: 'Confluence did not return the expected response.',
 } satisfies Record<Exclude<z.infer<typeof result>['kind'], 'ok'>, string>
 
 export function refuse(message: string): never {
@@ -171,6 +183,7 @@ async function requestConfluence(
       (response.status >= 300 && response.status < 400)
     )
       return { kind: 'auth' }
+    if (response.status === 400) return { kind: 'rejected' }
     if (response.status === 403) return { kind: 'forbidden' }
     if (response.status === 404) return { kind: 'missing' }
     if (response.status === 429) return { kind: 'limited' }

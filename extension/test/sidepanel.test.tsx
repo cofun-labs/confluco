@@ -639,6 +639,29 @@ describe('searching and browsing self-managed Confluence', () => {
     expect(results).toContain(base + '/pages/viewpage.action?pageId=42')
   })
 
+  it('lists, opens and searches a personal space whose key contains spaces', async () => {
+    const { browser, user } = await navigationPanel()
+    const personal = { key: '~User  One', name: 'Personal fixture space' }
+    browser.confluenceResponse = (url) => {
+      const path = new URL(url).pathname
+      if (path.endsWith('/space')) return Response.json({ results: [space, personal] })
+      if (path.endsWith('/search')) return Response.json({ results: [hit] })
+      return Response.json({ ...personal, homepage: page('42', 'Personal fixture home') })
+    }
+    browser.ai.script.push(
+      { toolCalls: [call('list_spaces')] },
+      { toolCalls: [call('get_space', { key: personal.key })] },
+      { toolCalls: [call('search_pages', { ...search, spaceKey: personal.key })] },
+      { reply: 'Personal fixture found.' },
+    )
+    await ask(user, 'Find the personal space, its homepage and the fixture page')
+    expect(await screen.findByText('Personal fixture found.')).toBeVisible()
+    const requests = browser.workspaceRequests.map(({ url }) => new URL(url))
+    expect(requests[1]?.pathname).toBe('/kb/rest/api/space/~User%20%20One')
+    expect(requests[2]?.searchParams.get('cql')).toContain('space = "~User  One"')
+    expect(toolResults(browser)).toContain(base + '/display/~User%20%20One')
+  })
+
   it.each([undefined, ref])('[UC-CONFLUENCE-003-S02] reads page hierarchy with reference %s', async (reference) => {
     const { browser, user } = await navigationPanel('/pages/viewpage.action?pageId=42')
     browser.confluenceResponse = (url) => {
