@@ -13,7 +13,7 @@ import {
   withExtensionsPage,
 } from './extension'
 import { E2eError } from './errors'
-import { TimeoutError, ask, pageTab, openPanel, ownPageTab, ownPanel } from './panel'
+import { TimeoutError, ask, closePanel, pageTab, openPanel, ownPageTab, ownPanel } from './panel'
 import { formatReply } from './reply'
 import { BrowserLock, checkOwner } from './lock'
 import { type State, loadState, saveState, statePath } from './state'
@@ -122,7 +122,6 @@ async function browserCommand(
     }
     case 'ask': {
       const panel = await ownPanel(browser, state)
-      await pageTab(browser, state, undefined)
       try {
         const result = await ask(panel, command.question, command.answer, command.timeoutMs)
         if (command.json) console.log(JSON.stringify(result, null, 2))
@@ -140,6 +139,7 @@ async function browserCommand(
       }
     }
     case 'close': {
+      await closePanel(browser, state)
       const id = await ownPageTab(browser, state)
       if (id) await browser.close(id)
       state.pageTarget = state.panelTarget = undefined

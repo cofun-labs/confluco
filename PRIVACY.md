@@ -4,7 +4,7 @@ Confluco opens an AI side panel on any website. This page describes what it read
 
 ## What the extension reads
 
-- **Page metadata.** The title and canonical URL of the active supported Confluence page are added to each question. Fragments and query parameters are stripped, except the numeric page ID required by self-hosted viewpage links. The same metadata labels and filters saved sessions.
+- **Page metadata.** The title and canonical URL of the active supported Confluence page are added to each question. Path parameters, fragments and query parameters are stripped, except the numeric page ID required by self-hosted viewpage links. The same metadata labels and filters saved sessions.
 - **Your conversation.** Messages you type and the assistant's replies supply the context for the next question.
 - **Your sign-in session.** Clerk's Sync Host session cookies identify sign-in changes, and Clerk provides a short-lived session token for each Worker request.
 
@@ -38,7 +38,7 @@ Sign in opens the configured Sync Host's `/login` page in a normal tab. It loads
 
 Conversations are saved in the extension's IndexedDB, per signed-in user. They include the page context saved with each question. Continuing a session sends relevant history to the Worker again. Saved sessions remain after sign-out and are unencrypted, so someone who can use the Chrome profile can read them. Deleting a session removes it locally; removing the extension removes its storage.
 
-Clerk keeps its client token in `chrome.storage.local`. That local sign-in storage is unencrypted. `chrome.storage.session` holds the extension's startup flag and is cleared when Chrome closes.
+Clerk keeps its client token in `chrome.storage.local`. That local sign-in storage is unencrypted.
 
 ## What is never collected
 

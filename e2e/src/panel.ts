@@ -165,8 +165,26 @@ export async function openPanel(browser: Browser, state: State, tab: Target): Pr
 /** The side panel `panel` opened, if it is still open. */
 export async function ownPanel(browser: Browser, state: State): Promise<Target> {
   const panel = await browser.find(state.panelTarget)
-  if (!panel) throw new E2eError('No side panel opened by pnpm e2e is open: run pnpm e2e panel first.')
+  if (panel?.url !== PANEL_URL)
+    throw new E2eError('No side panel opened by pnpm e2e is open: run pnpm e2e panel first.')
+  const tab = await pageTab(browser, state, undefined)
+  await browser.activate(tab.targetId)
   return browser.attach(panel.targetId)
+}
+
+/** The global panel stays open after its tab closes, so close the panel before closing the tab. */
+export async function closePanel(browser: Browser, state: State): Promise<void> {
+  const target = await browser.find(state.panelTarget)
+  if (target?.url !== PANEL_URL) return
+  const panel = await browser.attach(target.targetId)
+  const windowId = await panel.evaluate(() => chrome.windows.getCurrent().then((window) => window.id), [], z.number())
+  try {
+    await panel.evaluate((id: number) => chrome.sidePanel.close({ windowId: id }), [windowId], z.undefined())
+  } catch (err) {
+    // Closing the panel can detach its target before the API call reports completion.
+    if (await browser.find(target.targetId)) throw err
+  }
+  state.panelTarget = undefined
 }
 
 export interface AskResult {

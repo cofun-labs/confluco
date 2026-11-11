@@ -7,7 +7,9 @@ const CONFLUENCE_PATH = /\/confluence(?:\/|$)/i
 /** A page link for the model and session labels, derived only from browser tab metadata. */
 export function confluencePageUrl(url: URL): string | undefined {
   if ((url.protocol !== 'http:' && url.protocol !== 'https:') || url.username || url.password) return
-  const { origin, hostname, pathname } = url
+  const { origin, hostname } = url
+  // Java servlet URLs can carry session IDs in the path.
+  const pathname = url.pathname.replace(/;[^/]*|%3bjsessionid(?:=|%3d)[^/]*/gi, '')
   if (CLOUD_HOST.test(hostname)) {
     if (url.protocol === 'https:' && CLOUD_WIKI.test(pathname)) {
       return origin + (pathname.match(CLOUD_PAGE)?.[0] ?? pathname)
@@ -17,12 +19,9 @@ export function confluencePageUrl(url: URL): string | undefined {
   if (!CONFLUENCE_HOST.test(hostname) && !CONFLUENCE_PATH.test(pathname)) return
 
   // Self-hosted viewpage links use this numeric parameter to identify the page.
+  if (!pathname.endsWith('/pages/viewpage.action')) return origin + pathname
   const [pageId, duplicate] = url.searchParams.getAll('pageId')
-  const pageQuery =
-    pathname.endsWith('/pages/viewpage.action') && pageId && duplicate === undefined && /^\d+$/.test(pageId)
-      ? `?pageId=${pageId}`
-      : ''
-  return origin + pathname + pageQuery
+  if (pageId && duplicate === undefined && /^\d+$/.test(pageId)) return `${origin}${pathname}?pageId=${pageId}`
 }
 
 export async function currentConfluencePage(): Promise<{ title: string; url: string } | undefined> {
