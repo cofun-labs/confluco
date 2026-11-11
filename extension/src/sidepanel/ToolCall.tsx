@@ -63,8 +63,11 @@ export const ToolCall = memo(function ToolCall({
   const asking = tool.status === 'confirm' && onAnswer
   return (
     <>
-      {/* Open while asking, so the user sees exactly what the tool would do. */}
-      <details className={`tool ${tool.status}`} open={tool.status === 'confirm'}>
+      {/* Show the preview while the tool runs or waits for an answer. */}
+      <details
+        className={`tool ${tool.status}`}
+        open={tool.status === 'confirm' || (tool.status === 'running' && !!tool.preview)}
+      >
         <summary title={LABEL[tool.status]}>
           <span className="tool-mark" role="img" aria-label={LABEL[tool.status]}>
             {MARK[tool.status]}

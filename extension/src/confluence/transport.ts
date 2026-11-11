@@ -33,6 +33,7 @@ const result = z.discriminatedUnion('kind', [
       'forbidden',
       'missing',
       'unsupported',
+      'conflict',
       'limited',
       'large',
       'network',
@@ -49,6 +50,7 @@ const errors = {
   forbidden: 'Your Confluence account does not have permission for this request.',
   missing: 'The requested Confluence item is missing or is not visible to your account.',
   unsupported: 'This Confluence instance does not support the requested operation.',
+  conflict: 'The Confluence page has a newer version. Check the current page before trying again.',
   limited: 'Confluence rate-limited this request. Wait before asking again.',
   large: 'The Confluence response was too large to read.',
   network: 'Could not complete the request to Confluence. Check the site and try again.',
@@ -65,7 +67,7 @@ type RestRequest = {
   area: RestArea
   resource: string
   query: Query
-  method: 'GET' | 'POST' | 'DELETE'
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE'
   body?: string
 }
 
@@ -116,6 +118,22 @@ export function writeConfluenceLabel(target: ConfluenceTab, id: string, write: L
   )
 }
 
+export function createConfluencePage(target: ConfluenceTab, body: unknown, signal?: AbortSignal) {
+  return sendConfluence(
+    target,
+    { area: 'api', resource: 'content', method: 'POST', query: {}, body: JSON.stringify(body) },
+    signal,
+  )
+}
+
+export function updateConfluencePage(target: ConfluenceTab, id: string, body: unknown, signal?: AbortSignal) {
+  return sendConfluence(
+    target,
+    { area: 'api', resource: `content/${id}`, method: 'PUT', query: {}, body: JSON.stringify(body) },
+    signal,
+  )
+}
+
 async function sendConfluence(target: ConfluenceTab, request: RestRequest, signal?: AbortSignal) {
   signal?.throwIfAborted()
   if (!(await chrome.permissions.contains({ origins: [target.instance.permission] }))) {
@@ -124,7 +142,8 @@ async function sendConfluence(target: ConfluenceTab, request: RestRequest, signa
   signal?.throwIfAborted()
 
   const writing = request.method !== 'GET'
-  const uncertain = () => refuse('The label change may have been applied. Check the page before trying again.', true)
+  const uncertain = () =>
+    refuse('The Confluence change may have been applied. Check the page before trying again.', true)
   const requestId = crypto.randomUUID()
   const injection = {
     target: { tabId: target.tabId },
@@ -209,7 +228,10 @@ async function requestConfluence(expectedUrl: string, contextPath: string, reque
 
   if (area === 'experimental' && (method !== 'GET' || !/^content\/\d{1,20}\/version$/.test(resource)))
     return { kind: 'invalid' }
-  if (method !== 'GET' && !/^content\/\d{1,20}\/label$/.test(resource)) return { kind: 'invalid' }
+  const labelResource = /^content\/\d{1,20}\/label$/.test(resource)
+  if (method === 'POST' && resource !== 'content' && !labelResource) return { kind: 'invalid' }
+  if (method === 'PUT' && !/^content\/\d{1,20}$/.test(resource)) return { kind: 'invalid' }
+  if (method === 'DELETE' && !labelResource) return { kind: 'invalid' }
   const apiPath = `${contextPath}/rest/${area}/`
   const endpoint = new URL(actual.origin + apiPath + resource)
   if (endpoint.origin !== actual.origin || !endpoint.pathname.startsWith(apiPath) || endpoint.hash || endpoint.search)
@@ -240,6 +262,7 @@ async function requestConfluence(expectedUrl: string, contextPath: string, reque
     if (response.status === 403) return { kind: 'forbidden' }
     if (response.status === 404) return { kind: 'missing' }
     if (response.status === 405 || response.status === 501) return { kind: 'unsupported' }
+    if (response.status === 409) return { kind: 'conflict' }
     if (response.status === 429) return { kind: 'limited' }
     if (!response.ok) return { kind: 'network' }
     if (response.status === 204 && method === 'DELETE') return { kind: 'ok', data: null }

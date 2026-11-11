@@ -15,7 +15,7 @@ export interface ToolDefinition<S extends ArgsSchema> extends Omit<ToolSpec, 'pa
   /** Runs the tool with the arguments as the schema gives them. */
   run: (args: z.output<S>, signal?: AbortSignal) => Promise<unknown>
   /** What a call does, in words (see `ToolSpec.preview`), from the same arguments as `run` gets. */
-  preview?: (args: z.output<S>) => string | undefined | Promise<string | undefined>
+  preview?: (args: z.output<S>, signal?: AbortSignal) => string | undefined | Promise<string | undefined>
 }
 
 /**
@@ -37,10 +37,10 @@ export function defineTool<S extends ArgsSchema>({ args, run, preview, ...rest }
       return run(parsed.args, signal)
     },
     ...(preview && {
-      preview: (given: unknown) => {
+      preview: (given: unknown, signal?: AbortSignal) => {
         // Arguments that don't parse have no preview: the run refuses them, and says why.
         const parsed = parseArgs(args, given)
-        return parsed.ok ? preview(parsed.args) : undefined
+        return parsed.ok ? preview(parsed.args, signal) : undefined
       },
     }),
   }

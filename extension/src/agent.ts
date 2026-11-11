@@ -65,7 +65,7 @@ export interface ToolSpec {
    * What a call does, in words, from the state before it runs: shown on the call's card, and to the
    * user before agreeing when the tool needs confirmation. It may look things up first.
    */
-  preview?: (args: unknown) => string | undefined | Promise<string | undefined>
+  preview?: (args: unknown, signal?: AbortSignal) => string | undefined | Promise<string | undefined>
 }
 
 /** A tool call waiting for the user's OK. */
@@ -731,15 +731,15 @@ async function previewCall(
   signal?: AbortSignal,
 ): Promise<{ preview?: string; stop?: string }> {
   try {
-    const preview = tool?.preview?.(args)
+    const preview = tool?.preview?.(args, signal)
     if (typeof preview === 'string' || preview === undefined) return { preview }
     // Stop must not wait for a preview that looks things up.
     return {
       preview: await new Promise<string | undefined>((resolve, reject) => {
-        if (signal?.aborted) return resolve(undefined)
         const onAbort = () => resolve(undefined)
         signal?.addEventListener('abort', onAbort, { once: true })
         preview.then(resolve, reject).finally(() => signal?.removeEventListener('abort', onAbort))
+        if (signal?.aborted) onAbort()
       }),
     }
   } catch (err) {

@@ -10,6 +10,13 @@ import {
   spaceArgs,
   treeArgs,
 } from './confluence/navigation'
+import {
+  applyPageWrite,
+  describePageWrite,
+  pageTitleArgs,
+  preparePageWrite,
+  type PageWriteRequest,
+} from './confluence/page-writes'
 import { readPage } from './confluence/read-page'
 import type { ConfluenceTab } from './confluence/transport'
 import { defineTool } from './tool'
@@ -18,9 +25,51 @@ import { z } from './zod'
 export interface WorkspaceQuestion {
   tab: Promise<ConfluenceTab | undefined>
   labelChanges: LabelRequest[]
+  pageWrite?: PageWriteRequest
 }
 
-const labelOutcome = z.object({ changed: z.boolean() })
+const writeOutcome = z.object({ changed: z.boolean() })
+const changesData = (result: unknown) => writeOutcome.safeParse(result).data?.changed !== false
+
+function pageWriteTool(currentQuestion: () => WorkspaceQuestion, action: PageWriteRequest['action']) {
+  let prepared: { question: WorkspaceQuestion; plan: Awaited<ReturnType<typeof preparePageWrite>> } | undefined
+  return defineTool({
+    name: action === 'create' ? 'create_page' : 'rename_page',
+    description:
+      action === 'create'
+        ? 'Create a published child page only for a direct user request. Pass the exact quoted title. The tool takes the parent, space and optional plain-text body from the user message and verifies the published result.'
+        : 'Rename a published page only for a direct user request. Pass the exact quoted title. The tool takes the target from the user message and verifies that the published body and location are preserved.',
+    args: pageTitleArgs,
+    changesData,
+    preview: async ({ title }, signal) => {
+      prepared = undefined
+      const question = currentQuestion()
+      const request = question.pageWrite
+      if (request?.action !== action || request.title !== title) return undefined
+      const plan = await preparePageWrite(request, await question.tab, signal)
+      signal?.throwIfAborted()
+      if (currentQuestion() !== question) return undefined
+      prepared = { question, plan }
+      return describePageWrite(plan)
+    },
+    run: async ({ title }, signal) => {
+      signal?.throwIfAborted()
+      const ready = prepared
+      prepared = undefined
+      const question = currentQuestion()
+      if (
+        ready?.question !== question ||
+        ready.plan.request !== question.pageWrite ||
+        ready.plan.request.title !== title
+      ) {
+        const example = action === 'create' ? 'Create page "TITLE" under this page' : 'Rename this page to "TITLE"'
+        throw new Error(`Only the user can request this page change. Ask them to say ${example} on the intended page.`)
+      }
+      question.pageWrite = undefined
+      return applyPageWrite(ready.plan, signal)
+    },
+  })
+}
 
 export function createTools(currentQuestion: () => WorkspaceQuestion) {
   const currentTab = () => currentQuestion().tab
@@ -86,7 +135,7 @@ export function createTools(currentQuestion: () => WorkspaceQuestion) {
       name: 'change_page_label',
       description: 'Add or remove the exact label requested by the user on the current published page.',
       args: changeLabelArgs,
-      changesData: (result) => labelOutcome.safeParse(result).data?.changed !== false,
+      changesData,
       run: async (args, signal) => {
         signal?.throwIfAborted()
         const question = currentQuestion()
@@ -99,5 +148,7 @@ export function createTools(currentQuestion: () => WorkspaceQuestion) {
         return applyLabel(next, await question.tab, signal)
       },
     }),
+    pageWriteTool(currentQuestion, 'create'),
+    pageWriteTool(currentQuestion, 'rename'),
   ]
 }
