@@ -186,6 +186,12 @@ describe('saved sessions', () => {
     expect(pageKey(ROADMAP.url.replace('team.', 'other.'))).not.toBe(pageKey(ROADMAP.url))
   })
 
+  it('keeps self-hosted sessions distinct when the page ID is in the query', () => {
+    const page = 'https://confluence.example.org/pages/viewpage.action'
+    expect(pageKey(page + '?pageId=123&tracking=local#summary')).toBe(page + '?pageId=123')
+    expect(pageKey(page + '?pageId=456')).not.toBe(pageKey(page + '?pageId=123'))
+  })
+
   it('an open store does not block a schema upgrade', async () => {
     const store = new SessionStore('user_upgrade')
     await store.save(session('a', 'Summarize this page', 1000))

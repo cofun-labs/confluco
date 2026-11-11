@@ -1,7 +1,6 @@
-// The Confluence tab this tool opens, the side panel next to it, and asking questions there.
+// The website tab this tool opens, the side panel next to it, and asking questions there.
 import * as z from 'zod'
-import { confluenceUrl } from '../../extension/src/confluence/tab'
-import type { Answer } from './args'
+import { type Answer, WebUrl } from './args'
 import { type Browser, type Target, sleep, until } from './cdp'
 import { E2eError } from './errors'
 import { EXTENSION_ID } from './extension'
@@ -9,18 +8,18 @@ import { type PanelSnapshot, type ReplyPart, nextStep, readPanel, PanelSnapshotS
 import type { State } from './state'
 
 const PANEL_URL = `chrome-extension://${EXTENSION_ID}/sidepanel.html`
-/** The Confluence tab this tool opened, if it is still open. */
+/** The website tab this tool opened, if it is still open. */
 export async function ownPageTab(browser: Browser, state: State): Promise<string | undefined> {
   // Chrome's own id for the tab, not the remembered one: only a tab that is still open is used.
   return (await browser.find(state.pageTarget))?.targetId
 }
 
-/** Opens or navigates the tool's Confluence tab, or reuses it without a URL. */
+/** Opens or navigates the tool's website tab, or reuses it without a URL. */
 export async function pageTab(browser: Browser, state: State, url: string | undefined): Promise<Target> {
   let id = await ownPageTab(browser, state)
-  if (url && !confluenceUrl(url)) throw new E2eError(`Not a Confluence URL: ${url}.`)
+  if (url && !WebUrl.safeParse(url).success) throw new E2eError(`Not an HTTP or HTTPS URL: ${url}.`)
   if (!id) {
-    if (!url) throw new E2eError('No Confluence tab opened by pnpm e2e yet: pass a Confluence page URL.')
+    if (!url) throw new E2eError('No website tab opened by pnpm e2e yet: pass a website URL.')
     // The initial document can look loaded before navigation starts. Attach first and navigate explicitly.
     id = await browser.open('about:blank')
     state.pageTarget = id
@@ -33,7 +32,7 @@ export async function pageTab(browser: Browser, state: State, url: string | unde
     const { loaderId, errorText } = z
       .object({ loaderId: z.string().optional(), errorText: z.string().optional() })
       .parse(await tab.send('Page.navigate', { url }))
-    if (errorText) throw new E2eError(`Could not open the Confluence page: ${errorText}`)
+    if (errorText) throw new E2eError(`Could not open the website page: ${errorText}`)
     // Same-document navigation, such as an anchor change, does not give a new loader ID.
     if (!loaderId)
       await tab.evaluate(() => document.documentElement.removeAttribute('data-confluco-e2e-old'), [], z.undefined())
@@ -49,16 +48,16 @@ export async function pageTab(browser: Browser, state: State, url: string | unde
         [],
         z.object({ url: z.string() }).optional(),
       ),
-    { ms: 30_000, onTimeout: () => new E2eError('The Confluence tab did not finish loading.') },
+    { ms: 30_000, onTimeout: () => new E2eError('The website tab did not finish loading.') },
   )
-  if (!loaded || !confluenceUrl(loaded.url)) throw new E2eError('The Confluence tab is not on Confluence any more.')
+  if (!WebUrl.safeParse(loaded?.url).success) throw new E2eError('The website tab did not load an HTTP or HTTPS page.')
   return tab
 }
 
-/** Opens the side panel for the tool's Confluence tab, starts a new chat, and returns the panel. */
-export async function openPanel(browser: Browser, state: State, wiki: Target): Promise<Target> {
+/** Opens the side panel for the tool's website tab, starts a new chat, and returns the panel. */
+export async function openPanel(browser: Browser, state: State, tab: Target): Promise<Target> {
   // The panel works on the active tab of its window.
-  await browser.activate(wiki.targetId)
+  await browser.activate(tab.targetId)
 
   // chrome.sidePanel.open needs a user gesture in an extension page: open one of ours in a helper
   // tab, call it there as a click, and close the tab.
@@ -82,7 +81,7 @@ export async function openPanel(browser: Browser, state: State, wiki: Target): P
     // Other tabs may show the same page, so mark ours by a title of its own for a moment and find
     // it by that.
     const marker = `confluco-e2e-${crypto.randomUUID()}`
-    const title = await wiki.evaluate(
+    const title = await tab.evaluate(
       (m: string) => {
         const before = document.title
         document.title = m
@@ -101,10 +100,10 @@ export async function openPanel(browser: Browser, state: State, wiki: Target): P
             [marker],
             z.array(z.number()).optional(),
           ),
-        { ms: 5_000, onTimeout: () => new E2eError('Could not find the Confluence tab among the browser’s tabs.') },
+        { ms: 5_000, onTimeout: () => new E2eError('Could not find the website tab among the browser’s tabs.') },
       )
     } finally {
-      await wiki.evaluate(
+      await tab.evaluate(
         (m: string, t: string) => {
           if (document.title === m) document.title = t
         },
@@ -112,7 +111,7 @@ export async function openPanel(browser: Browser, state: State, wiki: Target): P
         z.undefined(),
       )
     }
-    if (tabs.length !== 1) throw new E2eError('Several tabs carry the marker of the Confluence tab.')
+    if (tabs.length !== 1) throw new E2eError('Several tabs carry the marker of the website tab.')
     tabId = tabs[0]
     await helper.evaluate((id: number) => chrome.sidePanel.open({ tabId: id }), [tabId], z.undefined(), {
       userGesture: true,

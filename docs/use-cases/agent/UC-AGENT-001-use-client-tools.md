@@ -4,7 +4,7 @@
 
 A signed-in user asks the AI something it can only answer with information or actions the extension has, such as what a Confluence page says. The extension offers the AI a set of tools. Instead of guessing, the AI asks the extension to run one; the extension runs it and sends back the result, and the AI uses that result to answer. The AI may use several tools, one after another, before it answers.
 
-With each question, the AI is also told which Confluence page is open in the current tab, or that none is, so it knows what "this page" means without using a tool. The user may move to another page between questions; each question is told the page open when it was asked.
+With each question, the AI is also told which recognized Confluence Cloud or self-hosted page is open in the current tab, or that no Confluence page is recognized, so it knows what "this page" means without using a tool. The user may move to another page between questions; each question is told the page open when it was asked.
 
 Each question gets a bounded number of steps, so a model that keeps calling tools cannot run on forever, and the user can stop the agent at any time.
 
@@ -35,9 +35,10 @@ Key constraints:
 | UC-AGENT-001-S13 | P1 | ✅ | Given a question that fails after the agent used a tool; when the user asks the next question; then the AI is given that tool's request and result. |
 | UC-AGENT-001-S14 | P1 | ✅ | Given a question that is stopped or fails before the agent used any tool; when the user asks the next question; then that question is left out of the conversation. |
 | UC-AGENT-001-S15 | P1 | ✅ | Given a Confluence page open in the current tab; when the user asks a question, moves to another site, and asks again; then the AI is told with the first question which page was open, and with the second that no Confluence page is. |
+| UC-AGENT-001-S24 | P1 | ✅ | Given the current tab is a recognized self-hosted Confluence page; when the user asks a question; then the AI gets the page title and a link that opens that page. |
 
 ### ai-e2e
 
 | ID | Priority | Status | Scenario |
 | --- | --- | --- | --- |
-| UC-AGENT-001-S16 | P0 | 🚧 | Given the side panel open on a Confluence page; when the user asks which page they are on; then the agent answers with the page's title without using a tool. |
+| UC-AGENT-001-S16 | P0 | ✅ | Given the side panel open on a Confluence page; when the user asks which page they are on; then the agent answers with the page's title without using a tool. |

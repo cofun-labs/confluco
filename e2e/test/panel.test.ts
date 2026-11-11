@@ -3,8 +3,8 @@ import { Browser } from '../src/cdp'
 import { pageTab } from '../src/panel'
 import type { State } from '../src/state'
 
-it('waits for the first navigation instead of treating the initial blank document as a Confluence page', async () => {
-  const url = 'https://team.atlassian.net/wiki/spaces/ENG/pages/123/Test'
+it('waits for the first navigation instead of treating the initial blank document as a loaded website', async () => {
+  const url = 'https://example.com/'
   let pageUrl = 'about:blank'
   const browser = new Browser({
     async send(method, params = {}) {

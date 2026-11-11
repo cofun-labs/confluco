@@ -143,7 +143,7 @@ async function browserCommand(
       const id = await ownPageTab(browser, state)
       if (id) await browser.close(id)
       state.pageTarget = state.panelTarget = undefined
-      console.log(id ? 'Closed the Confluence tab.' : 'No Confluence tab opened by pnpm e2e is open.')
+      console.log(id ? 'Closed the website tab.' : 'No website tab opened by pnpm e2e is open.')
       return 0
     }
     default:

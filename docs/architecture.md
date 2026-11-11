@@ -15,7 +15,7 @@ The agent loop runs in the side panel. The Worker verifies the user and passes t
 
 | Area | Choice | Why |
 |---|---|---|
-| Extension | Chrome MV3 + [Side Panel API](https://developer.chrome.com/docs/extensions/reference/api/sidePanel) | Sits next to the page without covering Confluence; enabled only on Confluence tabs |
+| Extension | Chrome MV3 + [Side Panel API](https://developer.chrome.com/docs/extensions/reference/api/sidePanel) | Sits next to the current page and stays available across sites |
 | Extension build | Vite + React + TypeScript | Clerk's extension SDK is React-based; Vite needs little config and no extension framework |
 | Sign-in | [Clerk](https://clerk.com) (`@clerk/chrome-extension`) with [Sync Host](https://clerk.com/docs/references/chrome-extension/sync-host) | Ready-made sign-in UI and sessions; the backend only verifies JWTs with a public key. Social logins need a redirect, which Chrome side panels don't support, so users sign in on a normal web page and the session syncs into the extension |
 | Backend | Cloudflare Workers + Hono | Model access stays server-side; the AI binding needs no API token |
@@ -52,13 +52,13 @@ extension/                Chrome extension
   manifest.ts             builds manifest.json from .env.local; a test pins its permissions and content security policy
   icons/icon.svg          the extension icon; `pnpm icons` exports it into public/icons, which the manifest lists
   sidepanel.html
-  src/background.ts       opens the side panel from the toolbar icon; enabled only on Confluence tabs
+  src/background.ts       opens the side panel from the toolbar icon
   src/agent.ts            agent loop (pi) against the worker; the only module that imports pi
   src/tools.ts            tools the agent runs in the extension
   src/tool.ts             defines a tool from one zod schema of its arguments
   src/zod.ts              zod, set up for the extension's content security policy; the only module that imports it
   src/sessions.ts         saved sessions (IndexedDB, per user)
-  src/confluence/tab.ts  Confluence Cloud URL recognition and per-question tab metadata
+  src/confluence/tab.ts  Cloud and self-hosted Confluence URL recognition and per-question tab metadata
   src/sidepanel/          React UI (main.tsx: sign-in, Chat.tsx: chat, Sessions.tsx: saved sessions,
                           ToolCall.tsx: one tool call and its changes)
   test/                   tests of client code and the whole panel in jsdom

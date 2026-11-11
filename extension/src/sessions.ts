@@ -1,5 +1,6 @@
 // Saved sessions, kept on this device in IndexedDB. Relevant messages are sent again when a saved conversation is continued.
 import type { HistoryMessage } from './agent'
+import { confluencePageUrl } from './confluence/tab'
 
 /** What the session list shows; the conversation itself is loaded only when a session opens. */
 export interface SessionInfo {
@@ -151,7 +152,7 @@ export function titleFor(messages: HistoryMessage[]): string {
 export function pageKey(url: string): string {
   try {
     const u = new URL(url)
-    return `${u.origin}${u.pathname}`
+    return confluencePageUrl(u) ?? `${u.origin}${u.pathname}`
   } catch {
     return url
   }

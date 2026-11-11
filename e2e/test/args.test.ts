@@ -12,11 +12,12 @@ describe('parseArgs', () => {
     expect(parseArgs(['--owner=issue-1', 'close']).owner).toBe('issue-1')
   })
 
-  it('takes an optional Confluence Cloud URL for panel, and refuses other sites', () => {
+  it('takes an optional website URL for panel, and refuses non-web URLs', () => {
     expect(parseArgs(['panel']).command).toEqual({ name: 'panel', url: undefined })
     const url = 'https://team.atlassian.net/wiki/spaces/ENG/pages/123'
     expect(parseArgs(['panel', url]).command).toEqual({ name: 'panel', url })
-    expect(() => parseArgs(['panel', 'https://example.com/'])).toThrow(UsageError)
+    expect(parseArgs(['panel', 'https://example.com/']).command).toEqual({ name: 'panel', url: 'https://example.com/' })
+    expect(() => parseArgs(['panel', 'chrome://settings'])).toThrow(UsageError)
   })
 
   it('reads ask with its answer, timeout, and output options', () => {

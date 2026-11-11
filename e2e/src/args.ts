@@ -1,6 +1,7 @@
 // The command line of `pnpm e2e`.
 import * as z from 'zod'
-import { confluenceUrl } from '../../extension/src/confluence/tab'
+
+export const WebUrl = z.url({ protocol: /^https?$/ })
 
 export type Answer = 'allow' | 'deny'
 const LockActionSchema = z.enum(['acquire', 'refresh', 'release', 'status'])
@@ -36,14 +37,14 @@ Drives the shared Chrome for Testing (CDP port 9230) for ai-e2e scenarios. See d
 Commands:
   reload                       Build this checkout into the extension folder the browser loads, reload it,
                                and check it is enabled
-  panel [url]                  Open the side panel on a Confluence Cloud URL in a tab owned by this tool.
+  panel [url]                  Open the side panel on a website URL in a tab owned by this tool.
                                Without a URL, reuse that tab; starts a new chat.
   ask [question]               Send the question in the side panel, wait for the reply, and print it
                                with each tool call; without a question, keep waiting for the last reply
       --allow | --deny         Answer every approval prompt this way (otherwise stop at the first one)
       --timeout <seconds>      How long to wait for the reply (default ${DEFAULT_TIMEOUT_S})
       --json                   Print the reply as JSON
-  close                        Close the Confluence tab this tool opened (and its side panel)
+  close                        Close the website tab this tool opened (and its side panel)
   lock acquire [purpose]       Hold the browser lock across several commands
   lock refresh|release|status
 
@@ -111,7 +112,7 @@ export function parseArgs(argv: string[]): Parsed {
     case 'panel': {
       most(1)
       const [url] = rest
-      if (url !== undefined && !confluenceUrl(url)) throw new UsageError(`Not a Confluence Cloud URL: ${url}`)
+      if (url !== undefined && !WebUrl.safeParse(url).success) throw new UsageError(`Not an HTTP or HTTPS URL: ${url}`)
       return { command: { name, url }, owner }
     }
     case 'ask': {

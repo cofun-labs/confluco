@@ -134,6 +134,6 @@ For another instance, test sign-in and session sync first. If Clerk rejects the 
 
 ## Real-browser scenarios
 
-See [BDD](bdd.md#running-an-ai-e2e-scenario) for the full workflow. The generic `pnpm e2e` CLI supports browser locks, extension reload, opening the side panel on a supplied Confluence Cloud URL, asking questions, printing replies and closing its own tab. Its unit tests run with `pnpm check`.
+See [BDD](bdd.md#running-an-ai-e2e-scenario) for the full workflow. The generic `pnpm e2e` CLI supports browser locks, extension reload, opening the side panel on a supplied website URL, asking questions, printing replies and closing its own tab. Its unit tests run with `pnpm check`.
 
 Start a dedicated Chrome for Testing profile with `--remote-debugging-address=127.0.0.1 --remote-debugging-port=9230 --user-data-dir=<dedicated-profile-directory>` and load `extension/dist` unpacked. Set `E2E_EXTENSION_ID` if your extension ID differs from the local development default. `E2E_CDP_PORT` overrides the port. Complete account sign-in in that profile before running scenarios.

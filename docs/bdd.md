@@ -35,7 +35,7 @@ A scenario earns its place only if deleting it would let an implementation pass 
 | Strategy | Use for | Verified by |
 |---|---|---|
 | `api-test` | Anything observable through the worker's HTTP API, the extension's client code, or the side panel's UI | A vitest integration test whose name starts with the scenario ID, in `worker/test/` (the worker's HTTP API) or `extension/test/` (the extension's client code in `*.test.ts`, the side panel's UI in `*.test.tsx`) |
-| `ai-e2e` | Paths that need real Chrome or real accounts: the side panel opening on Confluence tabs, Clerk sign-in, real Confluence pages, the real model | An agent drives Chrome with the extension loaded; the PR description or a comment records the run |
+| `ai-e2e` | Paths that need real Chrome or real accounts: the side panel opening from the toolbar on a website, Clerk sign-in, real Confluence pages, the real model | An agent drives Chrome with the extension loaded; the PR description or a comment records the run |
 
 Pick the cheapest strategy that observes the result directly. `ai-e2e` is not a place to park scenarios that could be `api-test`.
 
@@ -66,7 +66,7 @@ pnpm e2e lock release
 - **One dedicated browser, shared.** Hold the lock for the run with `lock acquire` and `lock release`. A command without an explicit lock takes it for that command. The owner is `--owner`, `$E2E_OWNER`, or the git branch. Give concurrent sessions distinct owners and run one command at a time per owner. A busy lock exits with code 3 and the holder's name. A lock not refreshed for 30 minutes is abandoned.
 - **Reload first.** `reload` builds this checkout into the loaded extension's directory and reloads it. It refuses to replace another extension or change the loaded signing key.
 - **Account setup.** The CLI reports missing sign-in, Developer mode or extension setup so a person can finish those steps in the dedicated profile.
-- **Own tabs.** `panel` opens the URL supplied by the tester in a tab owned by this run. `close` closes that tab and its panel. The CLI provides no workspace content creation or deletion commands.
+- **Own tabs.** `panel` opens the supplied HTTP or HTTPS URL in a tab owned by this run. `close` closes that tab and its panel. The CLI provides no workspace content creation or deletion commands.
 - **Approvals.** `ask --allow` or `ask --deny` answers every confirmation prompt that way. Without either, the CLI stops at a prompt with exit code 4 and prints what would change. `pnpm e2e ask --allow` continues the waiting reply.
 - **Output.** `ask` prints model text and every tool call, its status, arguments and result, in order. `--json` emits the same reply as JSON. A reply that ends with a panel error exits with code 1 and prints the visible error with any partial reply.
 

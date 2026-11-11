@@ -1,14 +1,14 @@
 # Privacy
 
-Confluco opens an AI side panel next to Confluence Cloud pages. This page describes what it reads, where data goes and what is retained. Hosts come from the build configuration in `extension/.env.local`. The checked-in `.env.smoke` configuration uses synthetic hosts for network-isolated tests.
+Confluco opens an AI side panel on any website. This page describes what it reads, where data goes and what is retained. Hosts come from the build configuration in `extension/.env.local`. The checked-in `.env.smoke` configuration uses synthetic hosts for network-isolated tests.
 
 ## What the extension reads
 
-- **Page metadata.** The title and canonical URL of the active supported Confluence page are added to each question. Query strings and fragments are stripped. The same metadata labels and filters saved sessions.
+- **Page metadata.** The title and canonical URL of the active supported Confluence page are added to each question. Fragments and query parameters are stripped, except the numeric page ID required by self-hosted viewpage links. The same metadata labels and filters saved sessions.
 - **Your conversation.** Messages you type and the assistant's replies supply the context for the next question.
 - **Your sign-in session.** Clerk's Sync Host session cookies identify sign-in changes, and Clerk provides a short-lived session token for each Worker request.
 
-Chrome's tab URLs are checked to enable the side panel on HTTPS `*.atlassian.net/wiki` pages. Metadata from other sites is excluded from requests to the model. The current build reads no Confluence page body and provides no Confluence read or write tools.
+Confluco checks the active tab's URL for an HTTPS Atlassian Cloud wiki or a `confluence` label in the hostname or path. Only matching tabs contribute a title or URL to the current question. The extension uses Chrome's existing tab metadata permission for this check. The current build reads no Confluence page body and provides no Confluence read or write tools.
 
 ## Where data goes
 

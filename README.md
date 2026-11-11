@@ -1,7 +1,7 @@
 <h1 align="center">Confluco</h1>
 
 <p align="center">
-  An AI side panel for Chrome alongside your Confluence pages.<br />
+  An AI side panel for Chrome with context from your Confluence pages.<br />
   Ask questions, draft text, and pick up earlier conversations.
 </p>
 
@@ -26,7 +26,7 @@ Page reading, searching, editing and comments will arrive with the Confluence to
 ## Get started
 
 1. Build and load the unpacked extension using the [setup guide](docs/development.md#extension). Chrome Web Store publication is pending.
-2. Open a Confluence Cloud wiki page and click the Confluco toolbar icon.
+2. Click the Confluco toolbar icon on any website. Open a Confluence page to include its title and link.
 3. Sign in on the page the panel opens. The panel picks up the session.
 4. Ask something, such as _Which page am I on?_ or _Draft an agenda for a product review_. Paste the text you want to revise into the chat.
 
@@ -36,7 +36,7 @@ Page reading, searching, editing and comments will arrive with the Confluence to
   <img src="docs/assets/how-it-works.svg" alt="The side panel sends your question and current page metadata through the Worker to the AI model" width="880" />
 </p>
 
-The side panel runs the agent in your browser and reads the active page's title and canonical URL for each question. The server verifies your sign-in and passes the conversation to a Cloudflare Workers AI model. Conversations are saved in Chrome on your device.
+The side panel runs the agent in your browser and includes the title and URL for each question on recognized Confluence pages. The server verifies your sign-in and passes the conversation to a Cloudflare Workers AI model. Conversations are saved in Chrome on your device.
 
 ## Privacy and safety
 
