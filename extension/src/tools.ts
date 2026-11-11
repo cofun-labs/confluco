@@ -44,7 +44,7 @@ export function createTools(currentTab: () => Promise<ConfluenceTab | undefined>
     defineTool({
       name: 'browse_page_tree',
       description:
-        'Read the ancestors and direct children of the active published page or a page reference on the connected self-managed site.',
+        'Read ancestors and direct children. Omit page for the active published page. For another page, use a reference returned by a Confluence tool.',
       args: treeArgs,
       run: async (args, signal) => browseTree(args, await currentTab(), signal),
     }),
