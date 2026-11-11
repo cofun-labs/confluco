@@ -131,7 +131,7 @@ const PAGE_JSON = JSON.stringify({
 const sentMessages = (call: number) => ai.calls[call].inputs.messages as Record<string, unknown>[]
 
 describe('extension agent against the worker', () => {
-  it('a plain question gets a streamed answer with no tools registered', async () => {
+  it('[UC-CHAT-001-S01] a plain question gets a streamed answer with no tools registered', async () => {
     const { result, updates, reply } = await ask(makeAgent({ tools: [] }), 'hi')
     expect(result).toEqual({ status: 'done' })
     expect(reply).toBe('你好 来自 worker ')
@@ -144,7 +144,7 @@ describe('extension agent against the worker', () => {
     ])
   })
 
-  it('a tool the model asks for runs in the extension and the answer uses its result', async () => {
+  it('[UC-AGENT-001-S04] a tool the model asks for runs in the extension and the answer uses its result', async () => {
     const { tool, runs } = pageTool()
     ai.script = [{ toolCalls: [{ name: 'lookup_page', arguments: '{}' }] }, { reply: 'You are on Q4 Roadmap' }]
     const { result, updates, reply } = await ask(makeAgent({ tools: [tool] }), 'Which page am I on?')
@@ -239,7 +239,7 @@ describe('extension agent against the worker', () => {
     expect(result).toEqual({ status: 'error', message: `Wait a minute. ${MAY_HAVE_CHANGED}` })
   })
 
-  it('a model that keeps calling tools is stopped at the step limit', async () => {
+  it('[UC-AGENT-001-S05] a model that keeps calling tools is stopped at the step limit', async () => {
     const { tool, runs } = pageTool()
     ai.toolCalls = [{ name: 'lookup_page', arguments: '{}' }]
     const agent = makeAgent({ tools: [tool], maxSteps: 3 })
@@ -429,7 +429,7 @@ describe('extension agent against the worker', () => {
     expect(reply).toBe('Open a page first ')
   })
 
-  it('stopping during a tool keeps the tools used so far, and drops what had not started', async () => {
+  it('[UC-AGENT-001-S12] stopping during a tool keeps the tools used so far, and drops what had not started', async () => {
     let agent: CopilotAgent
     const { tool: rename, runs } = renameTool()
     const slow: ToolSpec = {
@@ -470,7 +470,7 @@ describe('extension agent against the worker', () => {
     })
   })
 
-  it('a question that fails after a tool ran keeps the tool for the next question', async () => {
+  it('[UC-AGENT-001-S13] a question that fails after a tool ran keeps the tool for the next question', async () => {
     const { tool, runs } = renameTool()
     const failing: ToolSpec = {
       ...tool,
@@ -507,7 +507,7 @@ describe('extension agent against the worker', () => {
     ])
   })
 
-  it('a question stopped or failed before any tool ran is left out', async () => {
+  it('[UC-AGENT-001-S14] a question stopped or failed before any tool ran is left out', async () => {
     // Fails on the first model request.
     ai.failWith = new Error('capacity')
     const agent = makeAgent()
@@ -600,7 +600,7 @@ describe('extension agent against the worker', () => {
     expect(updates.flatMap((u) => (u.type === 'tool_end' ? [u.status] : []))).toEqual(['done'])
   })
 
-  it('a tool the user declines does not run, and the agent continues without it', async () => {
+  it('[UC-AGENT-001-S09] a tool the user declines does not run, and the agent continues without it', async () => {
     const { tool, runs } = renameTool()
     ai.script = [{ toolCalls: [RENAME_CALL] }, { reply: 'OK, I left the title as it is' }]
     const asked: ToolCallRequest[] = []
@@ -701,7 +701,7 @@ describe('extension agent against the worker', () => {
     expect(toolStatuses(updates)).toEqual(['done'])
   })
 
-  it('a tool the user agrees to runs, and the answer uses its result', async () => {
+  it('[UC-AGENT-001-S10] a tool the user agrees to runs, and the answer uses its result', async () => {
     const { tool, runs } = renameTool()
     ai.script = [{ toolCalls: [RENAME_CALL] }, { reply: 'Renamed to Q4 Plan' }]
     const { result, updates, reply } = await ask(
@@ -759,7 +759,7 @@ describe('extension agent against the worker', () => {
     expect(runs).toEqual([{}])
   })
 
-  it('stopping while the user is asked counts as no, ends the question, and keeps the call as stopped', async () => {
+  it('[UC-AGENT-001-S12] stopping while the user is asked counts as no, ends the question, and keeps the call as stopped', async () => {
     const { tool, runs } = renameTool()
     const agent = makeAgent({ tools: [tool] })
     ai.script = [{ toolCalls: [RENAME_CALL] }]
@@ -884,7 +884,7 @@ describe('extension agent against the worker', () => {
     expect(ai.calls.at(-1)!.model).toBe('@cf/test/next-model')
   })
 
-  it('a reopened session sends its earlier conversation, tool calls included', async () => {
+  it('[UC-SESSION-001-S01] a reopened session sends its earlier conversation, tool calls included', async () => {
     ai.script = [{ toolCalls: [{ name: 'lookup_page', arguments: '{}' }] }, { reply: 'You are on Q4 Roadmap' }]
     const first = makeAgent()
     await ask(first, 'Which page am I on?')
@@ -925,7 +925,7 @@ describe('extension agent against the worker', () => {
     ])
   })
 
-  it('a new or other session sends nothing from earlier sessions', async () => {
+  it('[UC-SESSION-001-S02] a new or other session sends nothing from earlier sessions', async () => {
     const agent = makeAgent()
     await ask(agent, 'secret plans')
     const earlier = agent.history()
@@ -984,7 +984,7 @@ describe('extension agent against the worker', () => {
     expect(result).toEqual({ status: 'error', message: 'invalid or expired session' })
   })
 
-  it('shows when the daily quota resets, and drops the refused question', async () => {
+  it('[UC-CHAT-001-S04] shows when the daily quota resets, and drops the refused question', async () => {
     env.DAILY_REQUEST_LIMIT = '1'
     const agent = makeAgent()
     expect((await ask(agent, 'first')).result).toEqual({ status: 'done' })
@@ -999,7 +999,7 @@ describe('extension agent against the worker', () => {
     expect(sentMessages(1).map((m) => m.content)).toEqual(['You are Confluco.', 'first', '你好 来自 worker ', 'third'])
   })
 
-  it('a question answered with one tool uses two requests from the quota', async () => {
+  it('[UC-CHAT-001-S06] a question answered with one tool uses two requests from the quota', async () => {
     env.DAILY_REQUEST_LIMIT = '3'
     const { tool, runs } = pageTool()
     const agent = makeAgent({ tools: [tool] })
@@ -1029,7 +1029,7 @@ describe('extension agent against the worker', () => {
     return { agent, runs, result }
   }
 
-  it('a quota that runs out after a tool ran ends the question with the reset message', async () => {
+  it('[UC-CHAT-001-S07] a quota that runs out after a tool ran ends the question with the reset message', async () => {
     const { runs, result } = await askIntoQuota()
     expect(result).toMatchObject({
       status: 'error',

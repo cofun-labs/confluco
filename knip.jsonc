@@ -1,3 +1,9 @@
 {
-  "$schema": "https://unpkg.com/knip@6/schema-jsonc.json"
+  "$schema": "https://unpkg.com/knip@6/schema-jsonc.json",
+  "workspaces": {
+    "e2e": {
+      // The CLI runs the extension workspace's Vite binary when it rebuilds the loaded extension.
+      "ignoreBinaries": ["vite"]
+    }
+  }
 }

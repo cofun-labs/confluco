@@ -99,6 +99,35 @@
       }
     },
     {
+      "files": ["extension/src/confluence/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@earendil-works/pi-agent-core",
+                  "@earendil-works/pi-agent-core/**",
+                  "@earendil-works/pi-ai",
+                  "@earendil-works/pi-ai/**"
+                ],
+                "message": "Only extension/src/agent.ts imports pi."
+              },
+              {
+                "regex": "^(\\.\\./)+(agent|tool|tools|sessions|sidepanel)(\\.|/|$)",
+                "message": "The Confluence layer is independent of the agent, tools, sessions and UI."
+              },
+              {
+                "regex": "^zod(/|$)",
+                "message": "Import z from extension/src/zod.ts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       // The one module that imports pi, and the one that calls the worker.
       "files": ["extension/src/agent.ts"],
       "rules": {

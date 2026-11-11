@@ -40,7 +40,7 @@ function pausedReply(browser: FakeBrowser, reply: string, after = 150) {
 const comesBefore = (a: Element, b: Element) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)
 
 describe('asking the AI', () => {
-  it('the sent message appears and the reply streams in below it', async () => {
+  it('[UC-CHAT-001-S03] the sent message appears and the reply streams in below it', async () => {
     const { browser, user } = await openPanel()
     // The model has written its first words and is still writing.
     const resume = pausedReply(browser, 'The roadmap has three milestones')
@@ -59,7 +59,7 @@ describe('asking the AI', () => {
     await answered()
   })
 
-  it('injects fresh page metadata on each question while displaying the user text', async () => {
+  it('[UC-AGENT-001-S15] injects fresh page metadata on each question while displaying the user text', async () => {
     const tab = { url: PAGE_URL, title: 'Fixture page' }
     const browser = await FakeBrowser.start({ signedInAs: 'user_alice', tab })
     await browser.openPanel()
@@ -120,7 +120,7 @@ describe('sessions', () => {
     await user.click(await screen.findByRole('button', { name: title }))
   }
 
-  it('a saved chat can be reopened and continued', async () => {
+  it('[UC-SESSION-001-S12] a saved chat can be reopened and continued', async () => {
     const { browser, user } = await openPanel()
     browser.ai.script.push({ reply: 'Use a short agenda.' })
     await ask(user, 'Draft an agenda')
@@ -142,7 +142,7 @@ describe('sessions', () => {
     ])
   })
 
-  it('opening the side panel starts a new, empty session, with the earlier ones in the list', async () => {
+  it('[UC-SESSION-001-S07] opening the side panel starts a new, empty session, with the earlier ones in the list', async () => {
     const { browser, user } = await openPanel()
     browser.ai.script.push({ reply: 'Three milestones.' }, { reply: 'Alice.' })
     await ask(user, 'What is on the roadmap?')
@@ -178,7 +178,7 @@ describe('sessions', () => {
     expect(browser.sentToModel().map((m) => m.role)).toEqual(['system', 'user'])
   })
 
-  it('switching sessions stops a reply still coming in, and it lands in neither session', async () => {
+  it('[UC-SESSION-001-S08] switching sessions stops a reply still coming in, and it lands in neither session', async () => {
     const { browser, user } = await openPanel()
     browser.ai.script.push({ reply: 'Three milestones.' })
     await ask(user, 'What is on the roadmap?')
@@ -217,7 +217,7 @@ describe('sessions', () => {
 })
 
 describe('signing in and out', () => {
-  it('signing out from the side panel returns it to the sign-in screen', async () => {
+  it('[UC-AUTH-001-S04] signing out from the side panel returns it to the sign-in screen', async () => {
     const { browser, user } = await openPanel()
     browser.ai.script.push({ reply: 'Three milestones.' })
     await ask(user, 'What is on the roadmap?')

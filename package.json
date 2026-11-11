@@ -13,10 +13,13 @@
     "test": "pnpm -r test",
     "smoke": "pnpm build:smoke && pnpm --silent --filter confluco-smoke smoke",
     "icons": "pnpm --silent --filter confluco-smoke icons",
-    "check": "pnpm lint && pnpm knip && pnpm format:check && pnpm typecheck && pnpm build:smoke && pnpm test"
+    "check": "pnpm lint && pnpm knip && pnpm format:check && pnpm typecheck && pnpm build:smoke && pnpm test",
+    "e2e": "pnpm --silent --filter confluco-e2e e2e",
+    "prepare": "lefthook install"
   },
   "devDependencies": {
     "knip": "^6.44.2",
+    "lefthook": "^2.2.2",
     "oxfmt": "~0.77.0",
     "oxlint": "^1.92.0"
   },

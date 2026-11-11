@@ -1,4 +1,5 @@
 packages:
+  - e2e
   - extension
   - smoke
   - worker
@@ -10,5 +11,6 @@ allowBuilds:
   browser-tabs-lock: false
   core-js: false
   esbuild: true
+  lefthook: true
   protobufjs: false
   workerd: true
