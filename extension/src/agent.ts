@@ -57,10 +57,10 @@ export interface ToolSpec {
   /**
    * The tool changes the user's data. When a question stops after such a tool ran and changed
    * something, or may have (its error has `mayHaveChanged`), the user is told to check before
-   * asking again, so they don't ask for a change twice. Every successful run counts, even one
-   * that changed nothing (an edit of no-ops): over-warning is the safe side.
+   * asking again, so they don't ask for a change twice. A predicate can distinguish a verified
+   * no-op from a successful write. A tool that cannot make that distinction can use `true`.
    */
-  changesData?: boolean
+  changesData?: boolean | ((result: unknown) => boolean)
   /**
    * What a call does, in words, from the state before it runs: shown on the call's card, and to the
    * user before agreeing when the tool needs confirmation. It may look things up first.
@@ -843,7 +843,8 @@ function toAgentTool(spec: ToolSpec, reporter: () => Reporter): AgentTool {
         if (causes(err).some((e) => e.mayHaveChanged === true)) report.changed()
         throw err
       }
-      if (spec.changesData) report.changed()
+      const changed = typeof spec.changesData === 'function' ? spec.changesData(result) : spec.changesData
+      if (changed) report.changed()
       // JSON.stringify(undefined) is undefined; tool results must be strings.
       const text = typeof result === 'string' ? result : (JSON.stringify(result) ?? '')
       return { content: [{ type: 'text', text }], details: undefined }

@@ -27,6 +27,8 @@ export interface WorkspaceQuestion {
   labelChanges: LabelRequest[]
 }
 
+const labelOutcome = z.object({ changed: z.boolean() })
+
 export function createTools(currentQuestion: () => WorkspaceQuestion) {
   const currentTab = () => currentQuestion().tab
   return [
@@ -91,7 +93,7 @@ export function createTools(currentQuestion: () => WorkspaceQuestion) {
       name: 'change_page_label',
       description: 'Add or remove the exact label requested by the user on the current published page.',
       args: changeLabelArgs,
-      changesData: true,
+      changesData: (result) => labelOutcome.safeParse(result).data?.changed !== false,
       run: async (args, signal) => {
         signal?.throwIfAborted()
         const question = currentQuestion()

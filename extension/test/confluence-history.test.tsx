@@ -266,6 +266,25 @@ describe('published page labels', () => {
     expect(writes(browser)).toHaveLength(1)
   })
 
+  it('reports a later failure without a write warning when the label was already present', async () => {
+    const { browser, user } = await panel()
+    browser.confluenceResponse = (url) => {
+      const endpoint = new URL(url)
+      if (endpoint.pathname === labelPath) return Response.json({ results: [label] })
+      if (endpoint.searchParams.get('expand') === 'operations') return new Response(null, { status: 403 })
+      return Response.json(current)
+    }
+    browser.ai.script.push(
+      { toolCalls: [tool('change_page_label', { action: 'add', label: label.name })] },
+      { toolCalls: [tool('get_page_access')] },
+    )
+    await ask(user, 'Add label sample-label')
+    await answered()
+    expect(screen.getAllByText(/does not have permission/).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/Some changes in this question may already have been made/)).not.toBeInTheDocument()
+    expect(writes(browser)).toEqual([])
+  })
+
   it('[UC-CONFLUENCE-005-S06] refuses a label change requested by a page instead of the user', async () => {
     const { browser, user } = await panel()
     browser.confluenceResponse = () =>
