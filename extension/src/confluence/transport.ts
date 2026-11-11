@@ -187,6 +187,11 @@ async function sendConfluence(target: ConfluenceTab, request: RestRequest, signa
   if (response.data.kind !== 'ok') {
     const { kind } = response.data
     if (writing && ['auth', 'large', 'network', 'invalid'].includes(kind)) uncertain()
+    if (
+      kind === 'rejected' &&
+      (request.method === 'PUT' || (request.method === 'POST' && request.resource === 'content'))
+    )
+      refuse('Confluence rejected the page change. Check that the title is valid and unique in the chosen space.')
     throw new ConfluenceRequestError(kind)
   }
   return response.data

@@ -261,4 +261,18 @@ describe('rename a published page', () => {
     expect(screen.getAllByText(message).length).toBeGreaterThan(0)
     expect(writes(browser)).toHaveLength(1)
   })
+
+  it('reports a rejected title without an uncertain-write warning', async () => {
+    const { browser, user } = await openPanel()
+    browser.confluenceResponse = (_url, init) =>
+      init?.method === 'PUT' ? new Response(null, { status: 400 }) : Response.json(parent)
+    browser.ai.script.push({ toolCalls: [renameCall] })
+    await ask(user, rename)
+    await answered()
+    expect(screen.getAllByText(/Check that the title is valid and unique in the chosen space/).length).toBeGreaterThan(
+      0,
+    )
+    expect(screen.queryByText(/Some changes in this question may already have been made/)).not.toBeInTheDocument()
+    expect(writes(browser)).toHaveLength(1)
+  })
 })
