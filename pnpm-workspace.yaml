@@ -1,0 +1,14 @@
+packages:
+  - extension
+  - smoke
+  - worker
+
+# Install scripts: true runs them, false skips them (pnpm fails on unlisted ones).
+allowBuilds:
+  # Pulled in by pi-ai for providers the extension doesn't use.
+  '@google/genai': false
+  browser-tabs-lock: false
+  core-js: false
+  esbuild: true
+  protobufjs: false
+  workerd: true

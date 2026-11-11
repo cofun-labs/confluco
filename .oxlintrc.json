@@ -1,0 +1,203 @@
+// The extension's module boundaries, as lint errors.
+// Oxlint's default rules stay on: this file only adds rules.
+//
+// An override replaces a rule's whole configuration, it does not merge with the one before it. So
+// each block below repeats the restrictions that still hold for its files, and a later block wins.
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "rules": {
+    // Everywhere in the repository, tests included. extension/src/agent.ts is exempted below.
+    "no-restricted-imports": [
+      "error",
+      {
+        "patterns": [
+          {
+            "group": [
+              "@earendil-works/pi-agent-core",
+              "@earendil-works/pi-agent-core/**",
+              "@earendil-works/pi-ai",
+              "@earendil-works/pi-ai/**"
+            ],
+            "message": "Only extension/src/agent.ts imports pi. Import what you need from agent.ts, or add it there."
+          }
+        ]
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["extension/**"],
+      "rules": {
+        "no-restricted-properties": [
+          "error",
+          {
+            "object": "chrome",
+            "property": "debugger",
+            "message": "Never use chrome.debugger: it shows a permanent \"debugging this browser\" banner."
+          }
+        ]
+      }
+    },
+    {
+      "files": ["extension/src/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@earendil-works/pi-agent-core",
+                  "@earendil-works/pi-agent-core/**",
+                  "@earendil-works/pi-ai",
+                  "@earendil-works/pi-ai/**"
+                ],
+                "message": "Only extension/src/agent.ts imports pi. Import what you need from agent.ts, or add it there."
+              },
+              {
+                "regex": "^zod(/|$)",
+                "message": "Import z from extension/src/zod.ts: it sets zod up for the extension's content security policy before any schema is built."
+              }
+            ]
+          }
+        ],
+        "no-restricted-globals": [
+          "error",
+          {
+            "name": "fetch",
+            "message": "Only extension/src/agent.ts calls the worker."
+          }
+        ],
+        "no-restricted-properties": [
+          "error",
+          {
+            "object": "chrome",
+            "property": "debugger",
+            "message": "Never use chrome.debugger: it shows a permanent \"debugging this browser\" banner."
+          },
+          {
+            "object": "chrome",
+            "property": "scripting",
+            "message": "Confluco uses tab metadata to enable the side panel."
+          },
+          {
+            "object": "globalThis",
+            "property": "fetch",
+            "message": "Only extension/src/agent.ts calls the worker."
+          },
+          {
+            "object": "window",
+            "property": "fetch",
+            "message": "Only extension/src/agent.ts calls the worker."
+          },
+          {
+            "object": "self",
+            "property": "fetch",
+            "message": "Only extension/src/agent.ts calls the worker."
+          }
+        ]
+      }
+    },
+    {
+      // The one module that imports pi, and the one that calls the worker.
+      "files": ["extension/src/agent.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^zod(/|$)",
+                "message": "Import z from extension/src/zod.ts: it sets zod up for the extension's content security policy before any schema is built."
+              }
+            ]
+          }
+        ],
+        "no-restricted-globals": "off",
+        "no-restricted-properties": [
+          "error",
+          {
+            "object": "chrome",
+            "property": "debugger",
+            "message": "Never use chrome.debugger: it shows a permanent \"debugging this browser\" banner."
+          },
+          {
+            "object": "chrome",
+            "property": "scripting",
+            "message": "Confluco uses tab metadata to enable the side panel."
+          }
+        ]
+      }
+    },
+    {
+      // The one module that imports zod. Its other restrictions (the extension/src block) still hold.
+      "files": ["extension/src/zod.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@earendil-works/pi-agent-core",
+                  "@earendil-works/pi-agent-core/**",
+                  "@earendil-works/pi-ai",
+                  "@earendil-works/pi-ai/**"
+                ],
+                "message": "Only extension/src/agent.ts imports pi. Import what you need from agent.ts, or add it there."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      // The worker imports zod through the module that sets it up, like the extension.
+      "files": ["worker/src/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@earendil-works/pi-agent-core",
+                  "@earendil-works/pi-agent-core/**",
+                  "@earendil-works/pi-ai",
+                  "@earendil-works/pi-ai/**"
+                ],
+                "message": "Only extension/src/agent.ts imports pi. Import what you need from agent.ts, or add it there."
+              },
+              {
+                "regex": "^zod(/|$)",
+                "message": "Import zod from worker/src/zod.ts (import * as z from './zod'): it sets zod up before any schema is built."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      // The one module of the worker that imports zod.
+      "files": ["worker/src/zod.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@earendil-works/pi-agent-core",
+                  "@earendil-works/pi-agent-core/**",
+                  "@earendil-works/pi-ai",
+                  "@earendil-works/pi-ai/**"
+                ],
+                "message": "Only extension/src/agent.ts imports pi. Import what you need from agent.ts, or add it there."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

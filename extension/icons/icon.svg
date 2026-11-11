@@ -1,0 +1,7 @@
+<!-- Confluco's conversation mark. Export the manifest's PNG sizes with `pnpm icons`. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <rect x="8" y="8" width="112" height="112" rx="30" fill="#1254ed" />
+  <path d="M86 38a34 34 0 1 0 0 52" fill="none" stroke="#ffffff" stroke-width="16" stroke-linecap="round" />
+  <path d="m43 85-6 19 25-11Z" fill="#ffffff" />
+  <circle cx="91" cy="64" r="9" fill="#7ce8f1" />
+</svg>

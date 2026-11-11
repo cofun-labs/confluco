@@ -1,0 +1,8 @@
+node_modules/
+dist/
+dist-smoke/
+keys/
+.env.local
+.env.*.local
+*.crx
+*.zip

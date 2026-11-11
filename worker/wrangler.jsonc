@@ -1,0 +1,29 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "confluco",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Workers Logs: keep console output and per-request invocation logs in the dashboard.
+  "observability": {
+    "logs": { "enabled": true, "invocation_logs": true },
+  },
+
+  // Workers AI: models run on Cloudflare, no external API keys.
+  "ai": { "binding": "AI" },
+
+  // Per-user daily request counters, one Durable Object per Clerk user id.
+  "durable_objects": { "bindings": [{ "name": "QUOTA", "class_name": "UserQuota" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["UserQuota"] }],
+
+  // Per-request usage records (sizes, token counts, outcome; never message content).
+  // Workers Analytics Engine keeps them for 90 days. The dataset is created on first write.
+  "analytics_engine_datasets": [{ "binding": "USAGE", "dataset": "confluco_usage" }],
+
+  "vars": {
+    "MODEL": "@cf/deepseek-ai/deepseek-v4.1-flash-1017",
+    "DAILY_REQUEST_LIMIT": "100",
+  },
+
+}

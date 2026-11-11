@@ -1,0 +1,18 @@
+{
+  "name": "confluco-smoke",
+  "version": "0.1.0",
+  "private": true,
+  "description": "pnpm smoke: loads the built extension into Chromium and checks that it still works",
+  "type": "module",
+  "scripts": {
+    "smoke": "playwright test",
+    "icons": "node export-icons.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.0",
+    "@types/chrome": "^0.3.7",
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2"
+  }
+}

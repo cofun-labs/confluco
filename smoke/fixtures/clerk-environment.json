@@ -1,0 +1,12 @@
+{
+  "object": "environment",
+  "id": "env_smoke",
+  "auth_config": { "object": "auth_config", "id": "aac_smoke", "single_session_mode": true },
+  "display_config": {
+    "object": "display_config",
+    "id": "display_config_smoke",
+    "instance_environment_type": "development"
+  },
+  "user_settings": {},
+  "organization_settings": {}
+}

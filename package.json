@@ -1,0 +1,24 @@
+{
+  "name": "confluco",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "oxlint .",
+    "knip": "knip",
+    "format:fix": "oxfmt --write '**/*.{ts,tsx,json,css}'",
+    "format:check": "oxfmt --check '**/*.{ts,tsx,json,css}'",
+    "typecheck": "pnpm -r typecheck",
+    "build": "pnpm --filter confluco-extension build",
+    "build:smoke": "pnpm build --mode smoke",
+    "test": "pnpm -r test",
+    "smoke": "pnpm build:smoke && pnpm --silent --filter confluco-smoke smoke",
+    "icons": "pnpm --silent --filter confluco-smoke icons",
+    "check": "pnpm lint && pnpm knip && pnpm format:check && pnpm typecheck && pnpm build:smoke && pnpm test"
+  },
+  "devDependencies": {
+    "knip": "^6.44.2",
+    "oxfmt": "~0.77.0",
+    "oxlint": "^1.92.0"
+  },
+  "packageManager": "pnpm@11.1.2"
+}
