@@ -3,6 +3,7 @@
 // are fakes: chrome.* (with a tab), Clerk (see clerk.tsx), IndexedDB, and the model binding.
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import { runInNewContext } from 'node:vm'
 import { act } from '@testing-library/react'
 import { IDBFactory } from 'fake-indexeddb'
 import { vi } from 'vitest'
@@ -18,7 +19,8 @@ export const START = new Date('2026-11-08T12:00:00Z')
 const globals = globalThis as Record<string, unknown>
 const realFetch = globalThis.fetch
 export const PAGE_URL = 'https://team.atlassian.net/wiki/spaces/ENG/pages/123/Fixture+page?tracking=local'
-type TestTab = { title?: string; url?: string }
+type TestTab = { id?: number; title?: string; url?: string; meta?: string }
+type Injection = { target: { tabId: number }; func: (...args: never[]) => unknown; args: unknown[] }
 // jsdom lays nothing out, so it has no scrolling; the panel scrolls its messages to the newest one.
 Element.prototype.scrollTo ??= () => {}
 const app = createApp()
@@ -35,7 +37,44 @@ export class FakeBrowser {
   /** URLs the panel opened in new tabs. */
   readonly openedTabs: string[] = []
 
+  readonly workspaceRequests: { url: string; init?: RequestInit }[] = []
+  readonly requestedOrigins: string[] = []
+  grantSiteAccess = true
+  confluenceResponse: (url: string, init?: RequestInit) => Response | Promise<Response> = () =>
+    new Response(null, { status: 404 })
+  private readonly sites = new Set<string>()
+  private readonly settings: Record<string, unknown> = {}
+  private readonly tabs = new Map<number, TestTab>()
+  private readonly worlds = new Map<number, Record<string, unknown>>()
+  private active?: TestTab
+
   private constructor(private readonly session: FakeSession | undefined) {}
+
+  selectTab(tab: TestTab) {
+    this.tabs.set(tab.id ?? 1, tab)
+    this.active = tab
+  }
+
+  private async executeScript({ target, func, args }: Injection) {
+    const tab = this.tabs.get(target.tabId)
+    if (!tab?.url) throw new Error('No such tab')
+    const world = this.worlds.get(target.tabId) ?? {}
+    this.worlds.set(target.tabId, world)
+    Object.assign(world, {
+      location: new URL(tab.url),
+      document: new DOMParser().parseFromString(tab.meta ?? '', 'text/html'),
+      URL,
+      AbortSignal,
+      AbortController,
+      TextDecoder,
+      fetch: async (url: string, init?: RequestInit) => {
+        this.workspaceRequests.push({ url, init })
+        return this.confluenceResponse(url, init)
+      },
+    })
+    const result: unknown = await runInNewContext(`(${func.toString()})(...args)`, Object.assign(world, { args }))
+    return [{ result }]
+  }
 
   /** Starts a browser on `tab`, signed in to Copilot as `signedInAs` or signed out. */
   static async start(options: { signedInAs?: string; tab?: TestTab } = {}): Promise<FakeBrowser> {
@@ -60,13 +99,34 @@ export class FakeBrowser {
     // A new browser profile: no saved sessions.
     globals.indexedDB = new IDBFactory()
 
-    const tab = options.tab ?? { url: PAGE_URL, title: 'Fixture page' }
+    browser.selectTab(options.tab ?? { url: PAGE_URL, title: 'Fixture page' })
     globals.chrome = {
       runtime: { getURL: (path: string) => `${EXTENSION}/${path}` },
       tabs: {
-        query: async () => [tab],
+        query: async () => (browser.active ? [{ id: 1, ...browser.active }] : []),
         create: async ({ url }: { url: string }) => void browser.openedTabs.push(url),
       },
+      storage: {
+        local: {
+          get: async (key: string | null) =>
+            key === null ? { ...browser.settings } : { [key]: browser.settings[key] },
+          set: async (items: Record<string, unknown>) => Object.assign(browser.settings, items),
+          remove: async (key: string) => {
+            delete browser.settings[key]
+          },
+        },
+      },
+      permissions: {
+        request: async ({ origins }: { origins: string[] }) => {
+          browser.requestedOrigins.push(...origins)
+          if (!browser.grantSiteAccess) return false
+          origins.forEach((origin) => browser.sites.add(origin))
+          return true
+        },
+        contains: async ({ origins }: { origins: string[] }) => origins.every((origin) => browser.sites.has(origin)),
+        remove: async ({ origins }: { origins: string[] }) => origins.every((origin) => browser.sites.delete(origin)),
+      },
+      scripting: { executeScript: (details: Injection) => browser.executeScript(details) },
       // The sign-in cookie the panel watches for a change in session state.
       cookies: {
         getAll: async ({ name }: { name: string }) => [{ name, value: session ? '1762603200' : '0' }],

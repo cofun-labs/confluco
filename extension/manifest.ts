@@ -84,7 +84,9 @@ export function buildManifest(env: ManifestEnv, version: string) {
     ...(env.CRX_PUBLIC_KEY ? { key: env.CRX_PUBLIC_KEY } : {}),
     icons: ICONS,
     // Tab URLs are used for page context and to associate local sessions with pages.
-    permissions: ['sidePanel', 'storage', 'tabs', 'cookies'],
+    permissions: ['sidePanel', 'storage', 'tabs', 'cookies', 'scripting'],
+    // Ask for the configured site at runtime, never all sites at install time.
+    optional_host_permissions: ['http://*/*', 'https://*/*'],
     host_permissions: [
       ...new Set([
         ...(clerkHost ? [`https://${clerkHost}/*`] : []),

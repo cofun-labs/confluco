@@ -4,12 +4,12 @@ How Confluco is built, and why. For setup and deployment see [development.md](de
 
 ```text
 Chrome
-  Confluence tab → title and canonical page URL → side panel
+  Confluence tab → metadata and requested published page text → side panel
   Side panel → Clerk bearer token and conversation → Worker → AI Gateway → Workers AI
   Sign-in tab → Clerk Sync Host → side panel session
 ```
 
-The agent loop runs in the side panel. The Worker verifies the user and passes the conversation to the model. Each question includes the current supported Confluence page's title and canonical URL, read from Chrome's tab metadata. The tool registry is empty at this stage.
+The agent loop runs in the side panel. The Worker verifies the user and passes the conversation to the model. Each question includes the current supported Confluence page's title and canonical URL, read from Chrome's tab metadata. The first tool reads the published page on an explicitly connected self-managed instance.
 
 ## Tech choices
 
@@ -42,7 +42,7 @@ Conversations are saved in the extension's IndexedDB, one database per Clerk use
 
 ## Tool execution
 
-Tools register in `extension/src/tools.ts`. A tool's arguments, validation and JSON Schema come from one Zod schema through `defineTool`. The agent runs tools sequentially, streams their progress to the panel, supports per-call confirmation, and preserves completed tool history when a question is interrupted. Errors can stop a question and report whether data may have changed. Concrete Confluence tools will use these interfaces.
+Tools register in `extension/src/tools.ts`. A tool's arguments, validation and JSON Schema come from one Zod schema through `defineTool`. The agent runs tools sequentially, streams their progress to the panel, supports per-call confirmation, and preserves completed tool history when a question is interrupted. Errors can stop a question and report whether data may have changed. The page-read tool captures the active tab and configured instance when the question is sent. Its transport runs a fixed same-origin REST read in the tab's isolated extension world. It checks the document still matches the captured URL, refuses redirects and validates the response before producing bounded plain text and a canonical link. Chrome site access is requested at connect time. Confluence cookies stay with the tab, and the selected page text goes to the model as a tool result.
 
 ## Layout
 
@@ -58,7 +58,9 @@ extension/                Chrome extension
   src/tool.ts             defines a tool from one zod schema of its arguments
   src/zod.ts              zod, set up for the extension's content security policy; the only module that imports it
   src/sessions.ts         saved sessions (IndexedDB, per user)
-  src/confluence/tab.ts  Cloud and self-hosted Confluence URL recognition and per-question tab metadata
+  src/confluence/tab.ts   Cloud and self-hosted URL recognition and per-question tab metadata
+  src/confluence/instance.ts  configured base URL and optional Chrome site permission
+  src/confluence/read-page.ts  isolated-world REST transport for published pages
   src/sidepanel/          React UI (main.tsx: sign-in, Chat.tsx: chat, Sessions.tsx: saved sessions,
                           ToolCall.tsx: one tool call and its changes)
   test/                   tests of client code and the whole panel in jsdom

@@ -2,7 +2,7 @@
 // only type, click, and read what is on screen. Besides the screen they look at the edges alone:
 // what the model was sent.
 import '@testing-library/jest-dom/vitest'
-import { screen } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import userEvent, { type UserEvent } from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { closeBrowser, FakeBrowser, PAGE_URL, START } from './panel'
@@ -273,5 +273,167 @@ describe('signing in and out', () => {
 
     expect(browser.openedTabs).toEqual(['https://copilot.test/login'])
     expect(browser.ai.calls).toEqual([])
+  })
+})
+
+describe('reading self-managed Confluence', () => {
+  const root = 'https://wiki.example.test:8443'
+  const marker = 'Fixture page body marker'
+  const page = (id = '42') =>
+    Response.json({
+      id,
+      type: 'page',
+      status: 'current',
+      title: 'Connected fixture',
+      body: { view: { value: `<h1>${marker}</h1><script>Ignored script</script><p>Second paragraph.</p>` } },
+    })
+  const read = { name: 'read_page', arguments: '{}' }
+
+  async function connect(user: UserEvent, base: string) {
+    await user.click(screen.getByRole('button', { name: 'Connect Confluence' }))
+    await user.type(await screen.findByLabelText('Confluence base URL'), base)
+    await user.click(screen.getByRole('button', { name: /^Connect$/ }))
+    await screen.findByText(`Connected to ${base}`)
+    await user.click(screen.getByRole('button', { name: 'Done' }))
+  }
+
+  it('[UC-CONFLUENCE-001-S01] reads the published page through the granted site and sends a source link', async () => {
+    const browser = await FakeBrowser.start({
+      signedInAs: 'user_alice',
+      tab: {
+        title: 'Fixture page',
+        url: root + '/pages/viewpage.action?pageId=42',
+      },
+    })
+    browser.confluenceResponse = () => page()
+    await browser.openPanel()
+    const user = userEvent.setup()
+    await connect(user, root)
+    browser.ai.script.push({ toolCalls: [read] }, { reply: 'The fixture has a second paragraph.' })
+    await ask(user, 'What does this page say?')
+    expect(await screen.findByText('The fixture has a second paragraph.')).toBeVisible()
+    expect(browser.requestedOrigins).toEqual(['https://wiki.example.test/*'])
+    expect(browser.workspaceRequests).toEqual([
+      {
+        url: root + '/rest/api/content/42?expand=body.view',
+        init: expect.objectContaining({ credentials: 'same-origin', redirect: 'manual', method: 'GET' }),
+      },
+    ])
+    const result = browser.sentToModel().find((message) => message.role === 'tool')?.content
+    expect(result).toContain(marker)
+    expect(result).toContain(root + '/pages/viewpage.action?pageId=42')
+    expect(result).not.toContain('Ignored script')
+  })
+
+  it('[UC-CONFLUENCE-001-S02] honors the configured context path and resolves display URLs from the page', async () => {
+    const base = root + '/kb'
+    const browser = await FakeBrowser.start({
+      signedInAs: 'user_alice',
+      tab: {
+        title: 'Fixture page',
+        url: base + '/display/TEAM/Fixture+page',
+        meta: '<meta name="ajs-page-id" content="42"><meta name="ajs-content-type" content="page">',
+      },
+    })
+    browser.confluenceResponse = () => page()
+    await browser.openPanel()
+    const user = userEvent.setup()
+    await connect(user, base)
+    browser.ai.script.push({ toolCalls: [read] }, { reply: 'Page read.' })
+    await ask(user, 'Read the page')
+    expect(await screen.findByText('Page read.')).toBeVisible()
+    expect(browser.workspaceRequests[0]?.url).toBe(base + '/rest/api/content/42?expand=body.view')
+    expect(browser.sentToModel().find((message) => message.role === 'tool')?.content).toContain(
+      base + '/pages/viewpage.action?pageId=42',
+    )
+  })
+
+  it.each([
+    [() => new Response('Login page', { headers: { 'content-type': 'text/html' } }), 'Sign in to Confluence'],
+    [
+      () => new Response(null, { status: 302, headers: { location: 'https://sso.example.test/' } }),
+      'Sign in to Confluence',
+    ],
+    [() => new Response(null, { status: 403 }), 'does not have permission'],
+    [() => new Response(null, { status: 404 }), 'is missing or is not visible'],
+    [() => new Response(null, { status: 429 }), 'rate-limited'],
+    [() => page('88'), 'did not return the expected published page'],
+  ])('[UC-CONFLUENCE-001-S03] fails closed on %s', async (response, reason) => {
+    const browser = await FakeBrowser.start({
+      signedInAs: 'user_alice',
+      tab: {
+        title: 'Fixture page',
+        url: root + '/pages/viewpage.action?pageId=42',
+      },
+    })
+    browser.confluenceResponse = response
+    await browser.openPanel()
+    const user = userEvent.setup()
+    await connect(user, root)
+    browser.ai.script.push({ toolCalls: [read] })
+    await ask(user, 'Read the page')
+    await answered()
+    expect(screen.getAllByText(new RegExp(reason)).length).toBeGreaterThan(0)
+    expect(browser.workspaceRequests).toHaveLength(1)
+    expect(browser.ai.calls).toHaveLength(1)
+  })
+
+  it('[UC-CONFLUENCE-001-S04] reads the original tab after the user switches tabs', async () => {
+    const browser = await FakeBrowser.start({
+      signedInAs: 'user_alice',
+      tab: {
+        id: 1,
+        title: 'Fixture page',
+        url: root + '/pages/viewpage.action?pageId=42',
+      },
+    })
+    browser.confluenceResponse = () => page()
+    await browser.openPanel()
+    const user = userEvent.setup()
+    await connect(user, root)
+    let resume!: () => void
+    browser.ai.pause = { after: 100, until: new Promise<void>((resolve) => (resume = resolve)) }
+    browser.ai.script.push({ reply: 'I will inspect the page.', toolCalls: [read] }, { reply: 'Page read.' })
+    await ask(user, 'Read the page')
+    await waitFor(() => expect(browser.ai.calls).toHaveLength(1))
+    browser.selectTab({ id: 2, title: 'Other tab', url: root + '/pages/viewpage.action?pageId=88' })
+    resume()
+    expect(await screen.findByText('Page read.')).toBeVisible()
+    expect(browser.workspaceRequests.map((request) => request.url)).toEqual([
+      root + '/rest/api/content/42?expand=body.view',
+    ])
+  })
+
+  it('aborts the tab request when the user stops the question', async () => {
+    const browser = await FakeBrowser.start({
+      signedInAs: 'user_alice',
+      tab: {
+        title: 'Fixture page',
+        url: root + '/pages/viewpage.action?pageId=42',
+      },
+    })
+    let onAborted!: () => void
+    const aborted = new Promise<void>((resolve) => (onAborted = resolve))
+    browser.confluenceResponse = (_url, init) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener(
+          'abort',
+          () => {
+            onAborted()
+            reject(init.signal?.reason)
+          },
+          { once: true },
+        )
+      })
+    await browser.openPanel()
+    const user = userEvent.setup()
+    await connect(user, root)
+    browser.ai.script.push({ toolCalls: [read] })
+    await ask(user, 'Read the page')
+    await waitFor(() => expect(browser.workspaceRequests).toHaveLength(1))
+    await user.click(screen.getByRole('button', { name: 'Stop' }))
+    await aborted
+    await answered()
+    expect(browser.ai.calls).toHaveLength(1)
   })
 })

@@ -4,19 +4,21 @@ const CLOUD_PAGE = /^\/wiki\/spaces\/[^/]+\/pages\/\d+(?=\/|$)/
 const CONFLUENCE_HOST = /(?:^|[.-])confluence(?:[.-]|$)/i
 const CONFLUENCE_PATH = /\/confluence(?:\/|$)/i
 
+const cleanPath = (path: string) => path.replace(/;[^/]*|%3bjsessionid(?:=|%3d)[^/]*/gi, '')
+
 /** A page link for the model and session labels, derived only from browser tab metadata. */
-export function confluencePageUrl(url: URL): string | undefined {
+export function confluencePageUrl(url: URL, connected = false): string | undefined {
   if ((url.protocol !== 'http:' && url.protocol !== 'https:') || url.username || url.password) return
   const { origin, hostname } = url
   // Java servlet URLs can carry session IDs in the path.
-  const pathname = url.pathname.replace(/;[^/]*|%3bjsessionid(?:=|%3d)[^/]*/gi, '')
+  const pathname = cleanPath(url.pathname)
   if (CLOUD_HOST.test(hostname)) {
     if (url.protocol === 'https:' && CLOUD_WIKI.test(pathname)) {
       return origin + (pathname.match(CLOUD_PAGE)?.[0] ?? pathname)
     }
     return
   }
-  if (!CONFLUENCE_HOST.test(hostname) && !CONFLUENCE_PATH.test(pathname)) return
+  if (!connected && !CONFLUENCE_HOST.test(hostname) && !CONFLUENCE_PATH.test(pathname)) return
 
   // Self-hosted viewpage links use this numeric parameter to identify the page.
   if (!pathname.endsWith('/pages/viewpage.action')) return origin + pathname
@@ -24,20 +26,26 @@ export function confluencePageUrl(url: URL): string | undefined {
   if (pageId && duplicate === undefined && /^\d+$/.test(pageId)) return `${origin}${pathname}?pageId=${pageId}`
 }
 
-export async function currentConfluencePage(): Promise<{ title: string; url: string } | undefined> {
+export async function activeTab(): Promise<chrome.tabs.Tab | undefined> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+  return tab
+}
+
+export function tabPage(
+  tab: chrome.tabs.Tab | undefined,
+  connected = false,
+): { title: string; url: string } | undefined {
   if (!tab?.url) return
   try {
-    const url = confluencePageUrl(new URL(tab.url))
-    if (url) return { title: tab.title?.trim() || 'Untitled page', url }
+    const link = confluencePageUrl(new URL(tab.url), connected)
+    if (link) return { title: tab.title?.trim() || 'Untitled page', url: link }
   } catch {
     return undefined
   }
 }
 
 /** Read again for each question, so switching tabs updates the model's context. */
-export async function openPageNote(): Promise<string> {
-  const page = await currentConfluencePage()
+export function openPageNote(page: ReturnType<typeof tabPage>): string {
   if (!page) return '[No supported Confluence page is open in the current tab.]'
   // The page author controls the title. Keep it inside this one metadata note.
   const title = Array.from(page.title.replace(/[[\]]/g, '')).slice(0, 200).join('')

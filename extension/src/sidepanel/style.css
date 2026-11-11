@@ -267,3 +267,23 @@ textarea {
 #composer button {
   align-self: flex-end;
 }
+
+.connection {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.connection form {
+  display: grid;
+  gap: 6px;
+}
+
+.connection input {
+  width: 100%;
+  padding: 6px;
+}
+
+.connection p {
+  margin: 6px 0;
+  overflow-wrap: anywhere;
+}

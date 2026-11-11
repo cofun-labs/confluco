@@ -16,19 +16,21 @@
 | Capability | Behavior |
 |---|---|
 | Chat | Stream replies, stop a running answer, and start a new conversation. |
+| Read a page | Ask about the published page on a connected self-managed Confluence 8.5 instance. |
 | Stay in context | Each question includes the current supported Confluence page's title and URL. |
 | Draft | Work with text you provide in the conversation. |
 | Keep sessions | Save conversations locally, search by title, filter by starting page, and continue earlier chats. |
 | Sign in | Use Google through the web sign-in page and keep the side panel in sync. |
 
-Page reading, searching, editing and comments will arrive with the Confluence tools. The current assistant works with your messages and the open page's metadata.
+Searching, editing and comments are planned. Confluence Cloud pages currently provide title and link context.
 
 ## Get started
 
 1. Build and load the unpacked extension using the [setup guide](docs/development.md#extension). Chrome Web Store publication is pending.
 2. Click the Confluco toolbar icon on any website. Open a Confluence page to include its title and link.
 3. Sign in on the page the panel opens. The panel picks up the session.
-4. Ask something, such as _Which page am I on?_ or _Draft an agenda for a product review_. Paste the text you want to revise into the chat.
+4. To read a self-managed page, select **Connect Confluence**, enter the site base URL including any context path, and grant Chrome site access. Open a published page while signed in to Confluence.
+5. Ask something, such as _Which page am I on?_ or _Draft an agenda for a product review_. Paste the text you want to revise into the chat.
 
 ## How it works
 
