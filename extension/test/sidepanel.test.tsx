@@ -278,6 +278,7 @@ describe('signing in and out', () => {
 
 describe('reading self-managed Confluence', () => {
   const root = 'https://wiki.example.test:8443'
+  const permission = root + '/*'
   const marker = 'Fixture page body marker'
   const page = (id = '42') =>
     Response.json({
@@ -312,7 +313,7 @@ describe('reading self-managed Confluence', () => {
     browser.ai.script.push({ toolCalls: [read] }, { reply: 'The fixture has a second paragraph.' })
     await ask(user, 'What does this page say?')
     expect(await screen.findByText('The fixture has a second paragraph.')).toBeVisible()
-    expect(browser.requestedOrigins).toEqual(['https://wiki.example.test:8443/*'])
+    expect(browser.requestedOrigins).toEqual([permission])
     expect(browser.workspaceRequests).toEqual([
       {
         url: root + '/rest/api/content/42?expand=body.view',
@@ -405,6 +406,23 @@ describe('reading self-managed Confluence', () => {
     expect(browser.ai.calls).toHaveLength(1)
   })
 
+  it('[UC-CONFLUENCE-001-S03] refuses to read after Chrome site access is revoked', async () => {
+    const browser = await FakeBrowser.start({
+      signedInAs: 'user_alice',
+      tab: { title: 'Fixture page', url: root + '/pages/viewpage.action?pageId=42' },
+    })
+    await browser.openPanel()
+    const user = userEvent.setup()
+    await connect(user, root)
+    browser.revokeSiteAccess(permission)
+    browser.ai.script.push({ toolCalls: [read] })
+    await ask(user, 'Read the page')
+    await answered()
+    expect(screen.getAllByText(/Confluco needs Chrome site access/).length).toBeGreaterThan(0)
+    expect(browser.workspaceRequests).toEqual([])
+    expect(browser.ai.calls).toHaveLength(1)
+  })
+
   it('[UC-CONFLUENCE-001-S04] reads the original tab after the user switches tabs', async () => {
     const browser = await FakeBrowser.start({
       signedInAs: 'user_alice',
@@ -429,6 +447,27 @@ describe('reading self-managed Confluence', () => {
     expect(browser.workspaceRequests.map((request) => request.url)).toEqual([
       root + '/rest/api/content/42?expand=body.view',
     ])
+  })
+
+  it('refuses to read when the same tab has navigated to another Confluence page', async () => {
+    const browser = await FakeBrowser.start({
+      signedInAs: 'user_alice',
+      tab: { id: 1, title: 'Fixture page', url: root + '/pages/viewpage.action?pageId=42' },
+    })
+    await browser.openPanel()
+    const user = userEvent.setup()
+    await connect(user, root)
+    let resume!: () => void
+    browser.ai.pause = { after: 100, until: new Promise<void>((resolve) => (resume = resolve)) }
+    browser.ai.script.push({ reply: 'I will inspect the page.', toolCalls: [read] })
+    await ask(user, 'Read the page')
+    await waitFor(() => expect(browser.ai.calls).toHaveLength(1))
+    browser.selectTab({ id: 1, title: 'Other page', url: root + '/pages/viewpage.action?pageId=88' })
+    resume()
+    await answered()
+    expect(screen.getAllByText(/The Confluence tab changed/).length).toBeGreaterThan(0)
+    expect(browser.workspaceRequests).toEqual([])
+    expect(browser.ai.calls).toHaveLength(1)
   })
 
   it('aborts the tab request when the user stops the question', async () => {

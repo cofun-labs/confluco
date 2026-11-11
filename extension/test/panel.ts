@@ -60,6 +60,10 @@ export class FakeBrowser {
     this.sites.add(permission)
   }
 
+  revokeSiteAccess(permission: string) {
+    this.sites.delete(permission)
+  }
+
   private async executeScript({ target, func, args }: Injection) {
     const tab = this.tabs.get(target.tabId)
     if (!tab?.url) throw new Error('No such tab')
