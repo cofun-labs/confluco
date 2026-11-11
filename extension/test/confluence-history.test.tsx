@@ -78,26 +78,29 @@ describe('published page history and access', () => {
     expect(browser.workspaceRequests.at(-1)?.url).toBe(base + '/rest/experimental/content/42/version?start=10&limit=10')
   })
 
-  it('[UC-CONFLUENCE-004-S02] reads the requested historical version with its source', async () => {
-    const { browser, user } = await panel()
-    browser.confluenceResponse = () =>
-      Response.json({
-        ...current,
-        status: 'historical',
-        version: { number: 2 },
-        body: { view: { value: '<p>Old page body only.</p><script>Hidden</script>' } },
-      })
-    browser.ai.script.push({ toolCalls: [tool('read_page_version', { version: 2 })] }, { reply: 'Read version 2.' })
-    await ask(user, 'Read the old version 2')
-    expect(await screen.findByText('Read version 2.')).toBeVisible()
-    expect(toolText(browser)).toContain('Old page body only.')
-    expect(toolText(browser)).not.toContain('Hidden')
-    expect(toolText(browser)).toContain('/pages/viewpreviousversions.action?pageId=42')
-    const endpoint = new URL(browser.workspaceRequests[0]!.url)
-    expect(endpoint.pathname).toBe('/kb/rest/api/content/42')
-    expect(endpoint.searchParams.get('version')).toBe('2')
-    expect(endpoint.searchParams.get('status')).toBe('historical')
-  })
+  it.each(['historical', 'current'])(
+    '[UC-CONFLUENCE-004-S02] reads a numbered version with status %s',
+    async (status) => {
+      const { browser, user } = await panel()
+      browser.confluenceResponse = () =>
+        Response.json({
+          ...current,
+          status,
+          version: { number: 2 },
+          body: { view: { value: '<p>Old page body only.</p><script>Hidden</script>' } },
+        })
+      browser.ai.script.push({ toolCalls: [tool('read_page_version', { version: 2 })] }, { reply: 'Read version 2.' })
+      await ask(user, 'Read version 2')
+      expect(await screen.findByText('Read version 2.')).toBeVisible()
+      expect(toolText(browser)).toContain('Old page body only.')
+      expect(toolText(browser)).not.toContain('Hidden')
+      expect(toolText(browser)).toContain('/pages/viewpreviousversions.action?pageId=42')
+      const endpoint = new URL(browser.workspaceRequests[0]!.url)
+      expect(endpoint.pathname).toBe('/kb/rest/api/content/42')
+      expect(endpoint.searchParams.get('version')).toBe('2')
+      expect(endpoint.searchParams.get('status')).toBe('historical')
+    },
+  )
 
   it.each([
     [() => new Response(null, { status: 404 }), 'is missing or is not visible'],
@@ -109,7 +112,7 @@ describe('published page history and access', () => {
           version: { number: 1 },
           body: { view: { value: 'Wrong version' } },
         }),
-      'did not return the requested historical version',
+      'did not return the requested page version',
     ],
   ])('[UC-CONFLUENCE-004-S03] refuses a missing or different historical version', async (response, message) => {
     const { browser, user } = await panel()

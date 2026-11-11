@@ -11,7 +11,7 @@ On a connected Confluence instance, the user can ask for a published page's vers
 | ID | Priority | Status | Scenario |
 | --- | --- | --- | --- |
 | UC-CONFLUENCE-004-S01 | P0 | ✅ | Given a published page with several versions; when the user asks about its history; then the assistant can identify versions and retrieve further results. |
-| UC-CONFLUENCE-004-S02 | P0 | ✅ | Given a page whose text has changed; when the user asks for a particular older version; then the assistant receives the text of that version and a source link. |
+| UC-CONFLUENCE-004-S02 | P0 | ✅ | Given a page whose text has changed; when the user asks for a specific version; then the assistant receives the text of that version and a source link. |
 | UC-CONFLUENCE-004-S03 | P1 | ✅ | Given a missing or inaccessible version; when the user asks for it; then the assistant reports the failure without substituting another version. |
 | UC-CONFLUENCE-004-S04 | P1 | ✅ | Given a page with available operations and restrictions; when the user asks about access; then the assistant receives the operations and the restrictions Confluence reports, with unavailable information identified. |
 

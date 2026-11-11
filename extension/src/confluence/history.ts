@@ -14,7 +14,7 @@ import { ConfluenceRequestError, getConfluence, refuse, requireTab, type Conflue
 const reference = pageReference.optional().describe('Omit to use the current published page.')
 const versionNumber = z.int().min(1)
 export const versionsArgs = z.strictObject({ page: reference, start: collectionStart })
-export const historicalArgs = z.strictObject({ page: reference, version: versionNumber })
+export const versionArgs = z.strictObject({ page: reference, version: versionNumber })
 export const accessArgs = z.strictObject({ page: reference })
 
 const version = z.object({
@@ -26,8 +26,8 @@ const version = z.object({
   by: z.object({ displayName: z.string().max(200).optional() }).optional(),
 })
 const versionedPage = publishedPage.extend({ version })
-const historicalPage = versionedPage.extend({
-  status: z.literal('historical'),
+const pageVersion = versionedPage.extend({
+  status: z.enum(['historical', 'current']),
   body: z.object({ view: z.object({ value: z.string() }) }),
 })
 const operation = z.object({ operation: z.string().min(1).max(80), targetType: z.string().max(80).optional() })
@@ -82,8 +82,8 @@ export async function listVersions(
   }
 }
 
-export async function readHistoricalVersion(
-  input: z.output<typeof historicalArgs>,
+export async function readPageVersion(
+  input: z.output<typeof versionArgs>,
   target: ConfluenceTab | undefined,
   signal?: AbortSignal,
 ) {
@@ -98,14 +98,14 @@ export async function readHistoricalVersion(
     },
     signal,
   )
-  const parsed = historicalPage.safeParse(response.data)
+  const parsed = pageVersion.safeParse(response.data)
   if (
     !parsed.success ||
     parsed.data.id !== (input.page?.id ?? response.pageId) ||
     parsed.data.version.number !== input.version ||
     parsed.data.version.hidden
   )
-    refuse('Confluence did not return the requested historical version.')
+    refuse('Confluence did not return the requested page version.')
   const page = parsed.data
   const text = readableText(page.body.view.value)
   const limit = 12_000

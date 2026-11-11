@@ -1,11 +1,4 @@
-import {
-  accessArgs,
-  historicalArgs,
-  listVersions,
-  pageAccess,
-  readHistoricalVersion,
-  versionsArgs,
-} from './confluence/history'
+import { accessArgs, listVersions, pageAccess, readPageVersion, versionArgs, versionsArgs } from './confluence/history'
 import { applyLabel, changeLabelArgs, labelsArgs, listLabels, type LabelRequest } from './confluence/labels'
 import {
   browseTree,
@@ -73,9 +66,9 @@ export function createTools(currentQuestion: () => WorkspaceQuestion) {
     }),
     defineTool({
       name: 'read_page_version',
-      description: 'Read the text of one older published version. Omit page to use the current tab.',
-      args: historicalArgs,
-      run: async (args, signal) => readHistoricalVersion(args, await currentTab(), signal),
+      description: 'Read the text of one published version by number. Omit page to use the current tab.',
+      args: versionArgs,
+      run: async (args, signal) => readPageVersion(args, await currentTab(), signal),
     }),
     defineTool({
       name: 'get_page_access',
