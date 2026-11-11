@@ -78,7 +78,7 @@
           {
             "object": "chrome",
             "property": "scripting",
-            "message": "Confluco reads page context from tab metadata."
+            "message": "Only extension/src/confluence/read-page.ts injects the Confluence REST transport."
           },
           {
             "object": "globalThis",
@@ -128,6 +128,21 @@
       }
     },
     {
+      // A published-page read runs in the Confluence tab and never calls the model Worker.
+      "files": ["extension/src/confluence/read-page.ts"],
+      "rules": {
+        "no-restricted-globals": "off",
+        "no-restricted-properties": [
+          "error",
+          {
+            "object": "chrome",
+            "property": "debugger",
+            "message": "Never use chrome.debugger in the extension."
+          }
+        ]
+      }
+    },
+    {
       // The one module that imports pi, and the one that calls the worker.
       "files": ["extension/src/agent.ts"],
       "rules": {
@@ -153,7 +168,7 @@
           {
             "object": "chrome",
             "property": "scripting",
-            "message": "Confluco reads page context from tab metadata."
+            "message": "Only extension/src/confluence/read-page.ts injects the Confluence REST transport."
           }
         ]
       }

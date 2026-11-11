@@ -1,14 +1,15 @@
 # Privacy
 
-Confluco opens an AI side panel on any website. This page describes what it reads, where data goes and what is retained. Hosts come from the build configuration in `extension/.env.local`. The checked-in `.env.smoke` configuration uses synthetic hosts for network-isolated tests.
+Confluco opens an AI side panel on any website. This page describes what it reads, where data goes and what is retained. Service hosts come from the build configuration in `extension/.env.local`. The checked-in `.env.smoke` configuration uses synthetic hosts for network-isolated tests.
 
 ## What the extension reads
 
 - **Page metadata.** The title and canonical URL of the active supported Confluence page are added to each question. Path parameters, fragments and query parameters are stripped, except the numeric page ID required by self-hosted viewpage links. The same metadata labels and filters saved sessions.
+- **Published page text.** When the assistant uses the read tool for a connected self-managed instance, it reads the current published page in the Confluence tab. It sends a bounded plain-text result, the title and a canonical link to the model as part of the conversation.
 - **Your conversation.** Messages you type and the assistant's replies supply the context for the next question.
 - **Your sign-in session.** Clerk's Sync Host session cookies identify sign-in changes, and Clerk provides a short-lived session token for each Worker request.
 
-Confluco checks the active tab's URL for an HTTPS Atlassian Cloud wiki or a `confluence` label in the hostname or path. Only matching tabs contribute a title or URL to the current question. The extension uses Chrome's existing tab metadata permission for this check. The current build reads no Confluence page body and provides no Confluence read or write tools.
+Confluco checks the active tab's URL for an HTTPS Atlassian Cloud wiki or a `confluence` label in the hostname or path. A tab on your explicitly connected instance can also contribute page metadata. The extension uses Chrome's existing tab metadata permission for this check. The side panel requests Chrome site access for the configured scheme, host, and port. Confluco reads content only on the connected instance, within its configured path.
 
 ## Where data goes
 
@@ -16,9 +17,10 @@ The manifest's host permissions and content security policy enforce the configur
 
 | Host | What is sent | Purpose |
 |---|---|---|
-| Configured Worker API origin (`VITE_API_URL`) | Clerk token, messages, relevant history, page title and canonical URL, assistant instructions and any registered tool definitions/results | Model access |
+| Configured Worker API origin (`VITE_API_URL`) | Clerk token, messages, relevant history, page title and canonical URL, assistant instructions and tool definitions and results, including requested Confluence page text | Model access |
 | Clerk Frontend API encoded in `VITE_CLERK_PUBLISHABLE_KEY` | Clerk session and token requests | Account access and sign-in |
 | `img.clerk.com` | Avatar image requests | Account display |
+| User-connected Confluence base URL | Same-origin page read from the Confluence tab using that tab's session | Read the requested published page |
 
 The extension also holds host permission for the Sync Host and its cookie domain. The parent-domain permission lets Chrome report the Clerk cookie that signals sign-in changes. It is used for cookie access. The extension sends no Confluence cookies or credentials to the Worker or Clerk. Cloudflare and Clerk see the connecting IP address as part of serving requests.
 
@@ -38,7 +40,7 @@ Sign in opens the configured Sync Host's `/login` page in a normal tab. It loads
 
 Conversations are saved in the extension's IndexedDB, per signed-in user. They include the page context saved with each question. Continuing a session sends relevant history to the Worker again. Saved sessions remain after sign-out and are unencrypted, so someone who can use the Chrome profile can read them. Deleting a session removes it locally; removing the extension removes its storage.
 
-Clerk keeps its client token in `chrome.storage.local`. That local sign-in storage is unencrypted.
+Clerk keeps its client token in `chrome.storage.local`. Confluco keeps the selected Confluence base URL there for your Confluco account. This local storage is unencrypted. Disconnecting removes the connection and requests revocation of site access when no other saved connection uses it.
 
 ## What is never collected
 

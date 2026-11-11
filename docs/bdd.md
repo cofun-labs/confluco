@@ -119,7 +119,7 @@ Key constraint:
 
 ## IDs
 
-- Use case: `UC-{DOMAIN}-{NNN}`. Domains: `AGENT`, `AUTH`, `CHAT`, `PANEL`, `SESSION`.
+- Use case: `UC-{DOMAIN}-{NNN}`. Domains: `AGENT`, `AUTH`, `CHAT`, `CONFLUENCE`, `PANEL`, `SESSION`.
 - Scenario: `{UC ID}-S{NN}`.
 - Once merged, IDs are never renumbered and deleted IDs are not reused. A scenario keeps its ID only for wording changes; changed behavior gets a new ID.
 - Test names start with the ID: `it('[UC-CHAT-001-S01] signed-in user gets a streamed reply', ...)`. Several tests may cover one scenario.

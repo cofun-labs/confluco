@@ -11,11 +11,12 @@ function manifest(env: Partial<ManifestEnv> = {}) {
 }
 
 describe('extension manifest', () => {
-  it('requests only the panel and auth permissions and never injects scripts', () => {
+  it('requests site access only at runtime for the Confluence transport', () => {
     const json = manifest({ VITE_API_URL: 'https://inference.example.net/v1' })
     expect(json.name).toBe('Confluco')
-    expect(json.permissions).toEqual(['sidePanel', 'storage', 'tabs', 'cookies'])
+    expect(json.permissions).toEqual(['sidePanel', 'storage', 'tabs', 'cookies', 'scripting'])
     expect(json).not.toHaveProperty('content_scripts')
+    expect(json.optional_host_permissions).toEqual(['http://*/*', 'https://*/*'])
     expect(json.host_permissions).toEqual([
       `https://${clerkHost}/*`,
       `${syncHost}/*`,
