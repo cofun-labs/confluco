@@ -272,6 +272,16 @@ describe('extension agent against the worker', () => {
         tag: z.string().optional(),
         // Required, and null is a value for it: its own schema says so.
         due: z.string().nullable(),
+        metadata: z.unknown(),
+        alias: z.literal([null, 'none']),
+        values: z.union([z.array(z.string()), z.array(z.null())]),
+        labels: z.record(z.string(), z.string()).optional(),
+        selection: z
+          .discriminatedUnion('kind', [
+            z.object({ kind: z.literal('page'), title: z.string() }),
+            z.object({ kind: z.literal('empty'), title: z.null() }),
+          ])
+          .optional(),
         tags: z.array(z.string()).optional(),
         // A record can explicitly permit null for a value.
         fields: z.record(z.string(), z.union([z.string(), z.array(z.string()), z.null()])).optional(),
@@ -282,7 +292,16 @@ describe('extension agent against the worker', () => {
         return 'Posted.'
       },
     })
-    const good = { text: 'Hi', urgent: false, count: 2, notes: [{ page: 'a' }], due: null }
+    const good = {
+      text: 'Hi',
+      urgent: false,
+      count: 2,
+      notes: [{ page: 'a' }],
+      due: null,
+      metadata: null,
+      alias: null,
+      values: [null],
+    }
     ai.script = [
       { toolCalls: [{ name: 'post_notes', arguments: JSON.stringify({ ...good, text: null }) }] },
       {
@@ -290,7 +309,7 @@ describe('extension agent against the worker', () => {
           {
             name: 'post_notes',
             arguments: JSON.stringify({
-              due: null,
+              ...good,
               text: null,
               urgent: null,
               count: null,
@@ -305,6 +324,19 @@ describe('extension agent against the worker', () => {
           {
             name: 'post_notes',
             arguments: JSON.stringify({ ...good, tags: ['a', null], fields: { Status: null, Tags: [null, 'b'] } }),
+          },
+        ],
+      },
+      {
+        toolCalls: [
+          {
+            name: 'post_notes',
+            arguments: JSON.stringify({
+              ...good,
+              notes: { page: null },
+              labels: { Status: null },
+              selection: { kind: 'page', title: null },
+            }),
           },
         ],
       },
@@ -341,7 +373,12 @@ describe('extension agent against the worker', () => {
         'Not run: null is not a value for `tags[1]`, `fields.Tags[0]`. ' +
         'Give the call again with a value there, or ask the user for one.',
     })
-    expect(sentMessages(4).at(-1)).toMatchObject({ role: 'tool', content: 'Posted.' })
+    expect(sentMessages(4).at(-1)).toMatchObject({
+      content:
+        'Not run: null is not a value for `notes.page`, `labels.Status`, `selection.title`. ' +
+        'Give the call again with a value there, or ask the user for one.',
+    })
+    expect(sentMessages(5).at(-1)).toMatchObject({ role: 'tool', content: 'Posted.' })
   })
 
   it('calls pi cannot run (unknown tool, invalid arguments) still stop at the step limit', async () => {
