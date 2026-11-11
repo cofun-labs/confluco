@@ -131,7 +131,7 @@ const PAGE_JSON = JSON.stringify({
 const sentMessages = (call: number) => ai.calls[call].inputs.messages as Record<string, unknown>[]
 
 describe('extension agent against the worker', () => {
-  it('a plain question gets a streamed answer with no tools registered', async () => {
+  it('[UC-CHAT-001-S01] a plain question gets a streamed answer with no tools registered', async () => {
     const { result, updates, reply } = await ask(makeAgent({ tools: [] }), 'hi')
     expect(result).toEqual({ status: 'done' })
     expect(reply).toBe('你好 来自 worker ')
@@ -144,7 +144,7 @@ describe('extension agent against the worker', () => {
     ])
   })
 
-  it('a tool the model asks for runs in the extension and the answer uses its result', async () => {
+  it('[UC-AGENT-001-S23] a tool the model asks for runs in the extension and the answer uses its result', async () => {
     const { tool, runs } = pageTool()
     ai.script = [{ toolCalls: [{ name: 'lookup_page', arguments: '{}' }] }, { reply: 'You are on Q4 Roadmap' }]
     const { result, updates, reply } = await ask(makeAgent({ tools: [tool] }), 'Which page am I on?')
@@ -239,7 +239,7 @@ describe('extension agent against the worker', () => {
     expect(result).toEqual({ status: 'error', message: `Wait a minute. ${MAY_HAVE_CHANGED}` })
   })
 
-  it('a model that keeps calling tools is stopped at the step limit', async () => {
+  it('[UC-AGENT-001-S05] a model that keeps calling tools is stopped at the step limit', async () => {
     const { tool, runs } = pageTool()
     ai.toolCalls = [{ name: 'lookup_page', arguments: '{}' }]
     const agent = makeAgent({ tools: [tool], maxSteps: 3 })
@@ -257,6 +257,128 @@ describe('extension agent against the worker', () => {
     ai.toolCalls = undefined
     expect((await ask(agent, 'Thanks')).result).toEqual({ status: 'done' })
     expect(sentMessages(3).at(-2)).toMatchObject({ role: 'tool', content: expect.stringContaining('limit of 3 steps') })
+  })
+
+  it('a null where the schema takes none is refused, not run as the text "null"', async () => {
+    const runs: unknown[] = []
+    const tool = defineTool({
+      name: 'post_notes',
+      description: 'Posts notes.',
+      args: z.strictObject({
+        text: z.string(),
+        urgent: z.boolean(),
+        count: z.number(),
+        notes: z.array(z.strictObject({ page: z.string(), title: z.string().optional() })),
+        tag: z.string().optional(),
+        // Required, and null is a value for it: its own schema says so.
+        due: z.string().nullable(),
+        metadata: z.unknown(),
+        alias: z.literal([null, 'none']),
+        values: z.union([z.array(z.string()), z.array(z.null())]),
+        labels: z.record(z.string(), z.string()).optional(),
+        selection: z
+          .discriminatedUnion('kind', [
+            z.object({ kind: z.literal('page'), title: z.string() }),
+            z.object({ kind: z.literal('empty'), title: z.null() }),
+          ])
+          .optional(),
+        tags: z.array(z.string()).optional(),
+        // A record can explicitly permit null for a value.
+        fields: z.record(z.string(), z.union([z.string(), z.array(z.string()), z.null()])).optional(),
+      }),
+      preview: () => `Post; ${runs.length} run(s) so far`,
+      run: async (args) => {
+        runs.push(args)
+        return 'Posted.'
+      },
+    })
+    const good = {
+      text: 'Hi',
+      urgent: false,
+      count: 2,
+      notes: [{ page: 'a' }],
+      due: null,
+      metadata: null,
+      alias: null,
+      values: [null],
+    }
+    ai.script = [
+      { toolCalls: [{ name: 'post_notes', arguments: JSON.stringify({ ...good, text: null }) }] },
+      {
+        toolCalls: [
+          {
+            name: 'post_notes',
+            arguments: JSON.stringify({
+              ...good,
+              text: null,
+              urgent: null,
+              count: null,
+              notes: [{ page: 'a' }, { page: null }],
+            }),
+          },
+        ],
+      },
+      // A null entry of a list of texts, at the top and inside values by name.
+      {
+        toolCalls: [
+          {
+            name: 'post_notes',
+            arguments: JSON.stringify({ ...good, tags: ['a', null], fields: { Status: null, Tags: [null, 'b'] } }),
+          },
+        ],
+      },
+      {
+        toolCalls: [
+          {
+            name: 'post_notes',
+            arguments: JSON.stringify({
+              ...good,
+              notes: { page: null },
+              labels: { Status: null },
+              selection: { kind: 'page', title: null },
+            }),
+          },
+        ],
+      },
+      // A null where the argument may be left out is still dropped, and the call runs.
+      {
+        toolCalls: [
+          {
+            name: 'post_notes',
+            arguments: JSON.stringify({ ...good, tag: null, notes: [{ page: 'a', title: null }] }),
+          },
+        ],
+      },
+      { reply: 'Done' },
+    ]
+    const { result, updates } = await ask(makeAgent({ tools: [tool] }), 'Post the notes')
+
+    expect(result).toEqual({ status: 'done' })
+    expect(runs).toEqual([good])
+    // Refused before the preview, like any call whose arguments don't fit.
+    expect(updates.filter((u) => u.type === 'tool_ready')).toHaveLength(1)
+    expect(sentMessages(1).at(-1)).toEqual({
+      role: 'tool',
+      tool_call_id: 'chatcmpl-tool-0',
+      content:
+        'Not run: null is not a value for `text`. Give the call again with a value there, or ask the user for one.',
+    })
+    expect(sentMessages(2).at(-1)).toMatchObject({
+      content:
+        'Not run: null is not a value for `text`, `urgent`, `count`, `notes[1].page`. ' +
+        'Give the call again with a value there, or ask the user for one.',
+    })
+    expect(sentMessages(3).at(-1)).toMatchObject({
+      content:
+        'Not run: null is not a value for `tags[1]`, `fields.Tags[0]`. ' +
+        'Give the call again with a value there, or ask the user for one.',
+    })
+    expect(sentMessages(4).at(-1)).toMatchObject({
+      content:
+        'Not run: null is not a value for `notes.page`, `labels.Status`, `selection.title`. ' +
+        'Give the call again with a value there, or ask the user for one.',
+    })
+    expect(sentMessages(5).at(-1)).toMatchObject({ role: 'tool', content: 'Posted.' })
   })
 
   it('calls pi cannot run (unknown tool, invalid arguments) still stop at the step limit', async () => {
@@ -429,7 +551,7 @@ describe('extension agent against the worker', () => {
     expect(reply).toBe('Open a page first ')
   })
 
-  it('stopping during a tool keeps the tools used so far, and drops what had not started', async () => {
+  it('[UC-AGENT-001-S12] stopping during a tool keeps the tools used so far, and drops what had not started', async () => {
     let agent: CopilotAgent
     const { tool: rename, runs } = renameTool()
     const slow: ToolSpec = {
@@ -470,7 +592,7 @@ describe('extension agent against the worker', () => {
     })
   })
 
-  it('a question that fails after a tool ran keeps the tool for the next question', async () => {
+  it('[UC-AGENT-001-S13] a question that fails after a tool ran keeps the tool for the next question', async () => {
     const { tool, runs } = renameTool()
     const failing: ToolSpec = {
       ...tool,
@@ -507,7 +629,7 @@ describe('extension agent against the worker', () => {
     ])
   })
 
-  it('a question stopped or failed before any tool ran is left out', async () => {
+  it('[UC-AGENT-001-S14] a question stopped or failed before any tool ran is left out', async () => {
     // Fails on the first model request.
     ai.failWith = new Error('capacity')
     const agent = makeAgent()
@@ -600,7 +722,7 @@ describe('extension agent against the worker', () => {
     expect(updates.flatMap((u) => (u.type === 'tool_end' ? [u.status] : []))).toEqual(['done'])
   })
 
-  it('a tool the user declines does not run, and the agent continues without it', async () => {
+  it('[UC-AGENT-001-S09] a tool the user declines does not run, and the agent continues without it', async () => {
     const { tool, runs } = renameTool()
     ai.script = [{ toolCalls: [RENAME_CALL] }, { reply: 'OK, I left the title as it is' }]
     const asked: ToolCallRequest[] = []
@@ -701,7 +823,7 @@ describe('extension agent against the worker', () => {
     expect(toolStatuses(updates)).toEqual(['done'])
   })
 
-  it('a tool the user agrees to runs, and the answer uses its result', async () => {
+  it('[UC-AGENT-001-S10] a tool the user agrees to runs, and the answer uses its result', async () => {
     const { tool, runs } = renameTool()
     ai.script = [{ toolCalls: [RENAME_CALL] }, { reply: 'Renamed to Q4 Plan' }]
     const { result, updates, reply } = await ask(
@@ -759,7 +881,7 @@ describe('extension agent against the worker', () => {
     expect(runs).toEqual([{}])
   })
 
-  it('stopping while the user is asked counts as no, ends the question, and keeps the call as stopped', async () => {
+  it('[UC-AGENT-001-S12] stopping while the user is asked counts as no, ends the question, and keeps the call as stopped', async () => {
     const { tool, runs } = renameTool()
     const agent = makeAgent({ tools: [tool] })
     ai.script = [{ toolCalls: [RENAME_CALL] }]
@@ -884,7 +1006,7 @@ describe('extension agent against the worker', () => {
     expect(ai.calls.at(-1)!.model).toBe('@cf/test/next-model')
   })
 
-  it('a reopened session sends its earlier conversation, tool calls included', async () => {
+  it('[UC-SESSION-001-S01] a reopened session sends its earlier conversation, tool calls included', async () => {
     ai.script = [{ toolCalls: [{ name: 'lookup_page', arguments: '{}' }] }, { reply: 'You are on Q4 Roadmap' }]
     const first = makeAgent()
     await ask(first, 'Which page am I on?')
@@ -925,7 +1047,7 @@ describe('extension agent against the worker', () => {
     ])
   })
 
-  it('a new or other session sends nothing from earlier sessions', async () => {
+  it('[UC-SESSION-001-S02] a new or other session sends nothing from earlier sessions', async () => {
     const agent = makeAgent()
     await ask(agent, 'secret plans')
     const earlier = agent.history()
@@ -984,7 +1106,7 @@ describe('extension agent against the worker', () => {
     expect(result).toEqual({ status: 'error', message: 'invalid or expired session' })
   })
 
-  it('shows when the daily quota resets, and drops the refused question', async () => {
+  it('[UC-CHAT-001-S04] shows when the daily quota resets, and drops the refused question', async () => {
     env.DAILY_REQUEST_LIMIT = '1'
     const agent = makeAgent()
     expect((await ask(agent, 'first')).result).toEqual({ status: 'done' })
@@ -999,7 +1121,7 @@ describe('extension agent against the worker', () => {
     expect(sentMessages(1).map((m) => m.content)).toEqual(['You are Confluco.', 'first', '你好 来自 worker ', 'third'])
   })
 
-  it('a question answered with one tool uses two requests from the quota', async () => {
+  it('[UC-CHAT-001-S06] a question answered with one tool uses two requests from the quota', async () => {
     env.DAILY_REQUEST_LIMIT = '3'
     const { tool, runs } = pageTool()
     const agent = makeAgent({ tools: [tool] })
@@ -1029,7 +1151,7 @@ describe('extension agent against the worker', () => {
     return { agent, runs, result }
   }
 
-  it('a quota that runs out after a tool ran ends the question with the reset message', async () => {
+  it('[UC-CHAT-001-S07] a quota that runs out after a tool ran ends the question with the reset message', async () => {
     const { runs, result } = await askIntoQuota()
     expect(result).toMatchObject({
       status: 'error',

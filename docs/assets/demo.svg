@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 440" role="img" aria-labelledby="title desc">
+  <title id="title">Confluco alongside a Confluence page</title>
+  <desc id="desc">The user asks which page is open. Confluco answers Weekly sync using the current page title and URL.</desc>
+  <style>
+    :root{--bg:#fff;--soft:#f4f6fb;--fg:#172b4d;--muted:#6b778c;--line:#dfe4ed;--accent:#1254ed;--on-accent:#fff}
+    @media(prefers-color-scheme:dark){:root{--bg:#1d2125;--soft:#272d34;--fg:#dee4ea;--muted:#a0abb9;--line:#3b4552;--accent:#579dff;--on-accent:#102040}}
+    text{font-family:Arial,sans-serif;fill:var(--fg)}.bg{fill:var(--bg)}.soft{fill:var(--soft)}.muted{fill:var(--muted)}.line{fill:none;stroke:var(--line)}.accent{fill:var(--accent)}
+  </style>
+  <rect class="bg" x="1" y="1" width="878" height="438" rx="14"/>
+  <rect class="line" x="1" y="1" width="878" height="438" rx="14"/>
+  <path class="line" d="M1 38h878M540 38v400"/>
+  <circle class="soft" cx="22" cy="20" r="5"/><circle class="soft" cx="40" cy="20" r="5"/><circle class="soft" cx="58" cy="20" r="5"/>
+  <rect class="soft" x="230" y="9" width="420" height="21" rx="10"/>
+  <text class="muted" x="440" y="24" text-anchor="middle" font-size="11">team.atlassian.net/wiki/spaces/ENG/pages/123</text>
+  <text class="muted" x="35" y="77" font-size="12">Engineering / Team meetings</text>
+  <text x="35" y="124" font-size="30" font-weight="700">Weekly sync</text>
+  <text x="35" y="168" font-size="16" font-weight="600">Agenda</text>
+  <g class="muted" font-size="14"><text x="44" y="201">• Review the upcoming release</text><text x="44" y="228">• Share progress and open questions</text><text x="44" y="255">• Agree on the next steps</text></g>
+  <text x="35" y="311" font-size="16" font-weight="600">Meeting notes</text>
+  <rect class="soft" x="35" y="329" width="455" height="9" rx="4"/><rect class="soft" x="35" y="350" width="395" height="9" rx="4"/><rect class="soft" x="35" y="371" width="423" height="9" rx="4"/>
+  <g transform="translate(554 49) scale(.22)"><rect x="8" y="8" width="112" height="112" rx="30" fill="#1254ed"/><path d="M86 38a34 34 0 1 0 0 52" fill="none" stroke="#fff" stroke-width="16" stroke-linecap="round"/><path d="m43 85-6 19 25-11Z" fill="#fff"/><circle cx="91" cy="64" r="9" fill="#7ce8f1"/></g>
+  <text x="591" y="69" font-size="15" font-weight="600">Confluco</text>
+  <path class="line" d="M540 86h339"/>
+  <text class="muted" x="558" y="111" font-size="12">Sessions</text><text class="muted" x="856" y="111" text-anchor="end" font-size="12">New chat</text>
+  <rect class="soft" x="663" y="143" width="196" height="40" rx="12"/>
+  <text x="846" y="168" font-size="13" text-anchor="end">Which page am I on?</text>
+  <text x="558" y="218" font-size="14">You are on Weekly sync.</text>
+  <rect class="line" x="557" y="377" width="305" height="43" rx="9"/>
+  <text class="muted" x="571" y="403" font-size="13">Ask something…</text>
+  <circle class="accent" cx="841" cy="398" r="12"/>
+  <path d="m841 391 5 6h-3v7h-4v-7h-3Z" fill="#fff"/>
+</svg>

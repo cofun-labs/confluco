@@ -301,6 +301,15 @@ export class CopilotAgent {
           terminate: true,
         }
       }
+      const nulls = coercedNulls(toolCall.arguments, args)
+      if (nulls.length) {
+        return {
+          block: true,
+          reason:
+            `Not run: null is not a value for ${nulls.map((path) => `\`${path}\``).join(', ')}. ` +
+            'Give the call again with a value there, or ask the user for one.',
+        }
+      }
       // Running from here on: a preview's lookups count toward the question, so at its request budget
       // they ask the user on this call's card.
       running = { id: toolCall.id, name: toolCall.name, args }
@@ -780,6 +789,28 @@ function causes(err: unknown): Record<string, unknown>[] {
     out.push(e as Record<string, unknown>)
   }
   return out
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+/**
+ * Compare the model's arguments with the validated copy. An optional null may be dropped and a
+ * valid null stays null. Refuse conversions such as null to "null", 0 or false before the preview.
+ */
+function coercedNulls(raw: unknown, args: unknown, path = ''): string[] {
+  if (raw === null) return args !== null && args !== undefined ? [path] : []
+  if (Array.isArray(args)) {
+    if (Array.isArray(raw)) {
+      return raw.flatMap((value, i) => coercedNulls(value, args[i], `${path}[${i}]`))
+    }
+    // The validator can wrap one value in an array. Keep paths as the model wrote them.
+    return args.length === 1 ? coercedNulls(raw, args[0], path) : []
+  }
+  if (!isRecord(raw) || !isRecord(args)) return []
+  return Object.entries(raw).flatMap(([key, value]) =>
+    coercedNulls(value, Object.hasOwn(args, key) ? args[key] : undefined, path ? `${path}.${key}` : key),
+  )
 }
 
 interface Reporter {

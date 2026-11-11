@@ -83,7 +83,7 @@ export function buildManifest(env: ManifestEnv, version: string) {
     description: 'An AI side panel for Confluence.',
     ...(env.CRX_PUBLIC_KEY ? { key: env.CRX_PUBLIC_KEY } : {}),
     icons: ICONS,
-    // Tab URLs are used to enable the panel and associate local sessions with pages.
+    // Tab URLs are used for page context and to associate local sessions with pages.
     permissions: ['sidePanel', 'storage', 'tabs', 'cookies'],
     host_permissions: [
       ...new Set([
@@ -99,8 +99,7 @@ export function buildManifest(env: ManifestEnv, version: string) {
     ],
     content_security_policy: { extension_pages: contentSecurityPolicy(env) },
     background: { service_worker: 'background.js', type: 'module' },
-    // No side_panel.default_path: without it, a tab has no panel unless background.ts
-    // sets one, so the panel stays off on other sites even before background.ts runs.
+    side_panel: { default_path: 'sidepanel.html' },
     action: { default_title: 'Open Confluco', default_icon: ICONS },
   }
 }

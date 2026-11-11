@@ -12,6 +12,7 @@ const FIXTURES = path.resolve(import.meta.dirname, '../fixtures')
 const CONFLUENCE_URLS = [
   'https://team.atlassian.net/wiki',
   'https://another.atlassian.net/wiki/spaces/ENG/pages/123/Smoke-Test',
+  'https://confluence.example.org/pages/viewpage.action?pageId=123',
 ]
 const OTHER_URL = 'https://example.com/'
 const PAGE_HOSTS = [...CONFLUENCE_URLS, OTHER_URL].map((url) => new URL(url).hostname)
@@ -94,18 +95,12 @@ const test = base.extend<Fixtures>({
   },
   background: async ({ context, backgroundErrors }, use) => {
     const background = context.serviceWorkers()[0] ?? (await context.waitForEvent('serviceworker'))
-    // Listen from the first moment Playwright has the worker, so failures during start-up are
-    // seen too. A message logged before that moment can still be missed; start-up's results are
-    // also checked directly (the flag below, and the panel behavior in the first test).
     background.on('console', (message) => {
       if (message.type() === 'error') backgroundErrors.push(message.text())
     })
-    // background.ts sets this flag once its start-up has run without failing. Tests wait for it
-    // before opening tabs: start-up applies the tab list it read earlier, and applied late that
-    // would turn the panel off again on a tab a test has just opened.
     await expect
-      .poll(() => background.evaluate(() => chrome.storage.session.get('panelInit')))
-      .toEqual({ panelInit: true })
+      .poll(() => background.evaluate(() => chrome.sidePanel.getPanelBehavior()))
+      .toEqual({ openPanelOnActionClick: true })
     await use(background)
   },
 })
@@ -120,42 +115,42 @@ function panelOptions(background: Worker, url: string): Promise<chrome.sidePanel
 }
 
 test('the service worker starts and sets up the side panel', async ({ background, backgroundErrors, blocked }) => {
-  // The background fixture has already waited for start-up to finish.
-  expect(await background.evaluate(() => chrome.sidePanel.getPanelBehavior())).toEqual({
-    openPanelOnActionClick: true,
+  expect(await background.evaluate(() => chrome.sidePanel.getOptions({}))).toMatchObject({
+    enabled: true,
+    path: 'sidepanel.html',
   })
   expect(backgroundErrors).toEqual([])
   expect(blocked).toEqual([])
 })
 
-test('the side panel is enabled on Confluence tabs and on no other site', async ({
+test('the side panel opens on an ordinary website and stays available across sites', async ({
   context,
   background,
   backgroundErrors,
   blocked,
 }) => {
-  for (const url of CONFLUENCE_URLS) {
-    const page = await context.newPage()
-    await page.goto(url)
-    await expect.poll(() => panelOptions(background, url), url).toMatchObject({ enabled: true, path: 'sidepanel.html' })
-  }
-
-  // A new tab on another site is off by default, so this alone would pass without background.ts
-  // looking at the tab. The step after it is the one that needs the panel turned off.
   const page = await context.newPage()
   await page.goto(OTHER_URL)
-  await expect.poll(() => panelOptions(background, OTHER_URL), OTHER_URL).toMatchObject({ enabled: false })
+  const helper = await context.newPage()
+  await helper.goto(`chrome-extension://${new URL(background.url()).host}/sidepanel.html`)
+  await page.bringToFront()
+  const session = await context.newCDPSession(helper)
+  const opened = await session.send('Runtime.evaluate', {
+    expression: 'chrome.windows.getCurrent().then(({ id }) => chrome.sidePanel.open({ windowId: id }))',
+    awaitPromise: true,
+    userGesture: true,
+  })
+  expect(opened.exceptionDetails).toBeUndefined()
+  await helper.close()
 
-  // A Jira page on the same tenant is still outside the wiki.
-  const jira = await context.newPage()
-  const jiraUrl = 'https://team.atlassian.net/browse/ENG-123'
-  await jira.goto(jiraUrl)
-  await expect.poll(() => panelOptions(background, jiraUrl)).toMatchObject({ enabled: false })
-
-  // Leaving Confluence in the same tab turns the panel off again.
-  const confluencePage = context.pages().find((candidate) => candidate.url() === CONFLUENCE_URLS[0])!
-  await confluencePage.goto(`${OTHER_URL}next`)
-  await expect.poll(() => panelOptions(background, `${OTHER_URL}next`)).toMatchObject({ enabled: false })
+  const sidePanels = () => background.evaluate(() => chrome.runtime.getContexts({ contextTypes: ['SIDE_PANEL'] }))
+  await expect.poll(async () => (await sidePanels()).length).toBe(1)
+  const [panel] = await sidePanels()
+  for (const url of [...CONFLUENCE_URLS, 'https://team.atlassian.net/browse/ENG-123', OTHER_URL]) {
+    await page.goto(url)
+    await expect.poll(() => panelOptions(background, url), url).toMatchObject({ enabled: true, path: 'sidepanel.html' })
+    expect(await sidePanels()).toMatchObject([{ contextId: panel.contextId }])
+  }
   expect(backgroundErrors).toEqual([])
   expect(blocked).toEqual([])
 })

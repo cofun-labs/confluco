@@ -78,7 +78,7 @@
           {
             "object": "chrome",
             "property": "scripting",
-            "message": "Confluco uses tab metadata to enable the side panel."
+            "message": "Confluco reads page context from tab metadata."
           },
           {
             "object": "globalThis",
@@ -94,6 +94,35 @@
             "object": "self",
             "property": "fetch",
             "message": "Only extension/src/agent.ts calls the worker."
+          }
+        ]
+      }
+    },
+    {
+      "files": ["extension/src/confluence/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@earendil-works/pi-agent-core",
+                  "@earendil-works/pi-agent-core/**",
+                  "@earendil-works/pi-ai",
+                  "@earendil-works/pi-ai/**"
+                ],
+                "message": "Only extension/src/agent.ts imports pi."
+              },
+              {
+                "regex": "^(\\.\\./)+(agent|tool|tools|sessions|sidepanel)(\\.|/|$)",
+                "message": "The Confluence layer is independent of the agent, tools, sessions and UI."
+              },
+              {
+                "regex": "^zod(/|$)",
+                "message": "Import z from extension/src/zod.ts."
+              }
+            ]
           }
         ]
       }
@@ -124,7 +153,7 @@
           {
             "object": "chrome",
             "property": "scripting",
-            "message": "Confluco uses tab metadata to enable the side panel."
+            "message": "Confluco reads page context from tab metadata."
           }
         ]
       }
