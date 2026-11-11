@@ -70,20 +70,20 @@ describe('create a published page', () => {
     const expectedBody = storage('<p>Literal &lt;tag&gt; &amp; text</p>')
     const created = { ...child, body: { storage: expectedBody }, version: { number: 1 } }
     const response = pendingResponse()
+    const preview = `Create "Child fixture" under "Parent fixture" (${pageUrl('42')}) in space TEST on ${base}.`
     browser.confluenceResponse = (url, init) => {
       const endpoint = new URL(url)
-      if (init?.method === 'POST') return response.promise
+      if (init?.method === 'POST') {
+        expect(screen.getByText(preview)).toBeVisible()
+        return response.promise
+      }
       if (endpoint.pathname === contentPath) return Response.json({ results: [] })
       if (endpoint.pathname === `${contentPath}/99`) return Response.json(created)
       return Response.json(parent)
     }
     browser.ai.script.push({ toolCalls: [createCall] }, { reply: 'Child created and verified.' })
     await ask(user, `Create page "Child fixture" in space TEST under ${pageUrl('42')} with text "Literal <tag> & text"`)
-    expect(
-      await screen.findByText(
-        `Create "Child fixture" under "Parent fixture" (${pageUrl('42')}) in space TEST on ${base}.`,
-      ),
-    ).toBeVisible()
+    expect(await screen.findByText(preview)).toBeVisible()
     expect(screen.queryByRole('img', { name: 'Waiting for your OK' })).not.toBeInTheDocument()
     expect(writes(browser)).toHaveLength(1)
     expect(writes(browser)[0]).toMatchObject({

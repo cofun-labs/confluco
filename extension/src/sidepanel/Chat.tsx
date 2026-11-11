@@ -1,5 +1,6 @@
 import { useAuth } from '@clerk/chrome-extension'
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { flushSync } from 'react-dom'
 import { CopilotAgent, MAY_HAVE_CHANGED, type AgentUpdate, type ConfirmTool, type HistoryMessage } from '../agent'
 import { getInstance } from '../confluence/instance'
 import { requestedLabelChanges } from '../confluence/labels'
@@ -223,16 +224,20 @@ export function Chat({ userId }: { userId: string }) {
           const tool: ShownTool = { id: u.id, name: u.name, args: u.args, status: 'running', result: '' }
           return { ...m, parts: [...m.parts, { type: 'tool', tool }] }
         })
-      else if (u.type === 'tool_ready')
-        updateReply((m) => {
-          const j = newestOpenCall(m.parts, u.id)
-          if (j < 0) return m
-          const part = m.parts[j] as Extract<Part, { type: 'tool' }>
-          const parts = [...m.parts]
-          parts[j] = { ...part, tool: { ...part.tool, args: u.args, preview: u.preview } }
-          return { ...m, parts }
-        })
-      else
+      else if (u.type === 'tool_ready') {
+        const showReadyTool = () =>
+          updateReply((m) => {
+            const j = newestOpenCall(m.parts, u.id)
+            if (j < 0) return m
+            const part = m.parts[j] as Extract<Part, { type: 'tool' }>
+            const parts = [...m.parts]
+            parts[j] = { ...part, tool: { ...part.tool, args: u.args, preview: u.preview } }
+            return { ...m, parts }
+          })
+        // The agent can dispatch the write as soon as this callback returns.
+        if (u.preview) flushSync(showReadyTool)
+        else showReadyTool()
+      } else
         updateReply((m) => {
           const j = newestOpenCall(m.parts, u.id)
           if (j < 0) return m
