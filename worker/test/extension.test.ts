@@ -259,6 +259,91 @@ describe('extension agent against the worker', () => {
     expect(sentMessages(3).at(-2)).toMatchObject({ role: 'tool', content: expect.stringContaining('limit of 3 steps') })
   })
 
+  it('a null where the schema takes none is refused, not run as the text "null"', async () => {
+    const runs: unknown[] = []
+    const tool = defineTool({
+      name: 'post_notes',
+      description: 'Posts notes.',
+      args: z.strictObject({
+        text: z.string(),
+        urgent: z.boolean(),
+        count: z.number(),
+        notes: z.array(z.strictObject({ page: z.string(), title: z.string().optional() })),
+        tag: z.string().optional(),
+        // Required, and null is a value for it: its own schema says so.
+        due: z.string().nullable(),
+        tags: z.array(z.string()).optional(),
+        // A record can explicitly permit null for a value.
+        fields: z.record(z.string(), z.union([z.string(), z.array(z.string()), z.null()])).optional(),
+      }),
+      preview: () => `Post; ${runs.length} run(s) so far`,
+      run: async (args) => {
+        runs.push(args)
+        return 'Posted.'
+      },
+    })
+    const good = { text: 'Hi', urgent: false, count: 2, notes: [{ page: 'a' }], due: null }
+    ai.script = [
+      { toolCalls: [{ name: 'post_notes', arguments: JSON.stringify({ ...good, text: null }) }] },
+      {
+        toolCalls: [
+          {
+            name: 'post_notes',
+            arguments: JSON.stringify({
+              due: null,
+              text: null,
+              urgent: null,
+              count: null,
+              notes: [{ page: 'a' }, { page: null }],
+            }),
+          },
+        ],
+      },
+      // A null entry of a list of texts, at the top and inside values by name.
+      {
+        toolCalls: [
+          {
+            name: 'post_notes',
+            arguments: JSON.stringify({ ...good, tags: ['a', null], fields: { Status: null, Tags: [null, 'b'] } }),
+          },
+        ],
+      },
+      // A null where the argument may be left out is still dropped, and the call runs.
+      {
+        toolCalls: [
+          {
+            name: 'post_notes',
+            arguments: JSON.stringify({ ...good, tag: null, notes: [{ page: 'a', title: null }] }),
+          },
+        ],
+      },
+      { reply: 'Done' },
+    ]
+    const { result, updates } = await ask(makeAgent({ tools: [tool] }), 'Post the notes')
+
+    expect(result).toEqual({ status: 'done' })
+    expect(runs).toEqual([good])
+    // Refused before the preview, like any call whose arguments don't fit.
+    expect(updates.filter((u) => u.type === 'tool_ready')).toHaveLength(1)
+    expect(sentMessages(1).at(-1)).toEqual({
+      role: 'tool',
+      tool_call_id: 'chatcmpl-tool-0',
+      content:
+        'Not run: null is not a value for `text`. Give the call again with a value there, or ask the user for one.',
+    })
+    expect(sentMessages(2).at(-1)).toMatchObject({
+      content:
+        'Not run: null is not a value for `text`, `urgent`, `count`, `notes[1].page`. ' +
+        'Give the call again with a value there, or ask the user for one.',
+    })
+    expect(sentMessages(3).at(-1)).toMatchObject({
+      content:
+        'Not run: null is not a value for `tags[1]`, `fields.Tags[0]`. ' +
+        'Give the call again with a value there, or ask the user for one.',
+    })
+    expect(sentMessages(4).at(-1)).toMatchObject({ role: 'tool', content: 'Posted.' })
+  })
+
   it('calls pi cannot run (unknown tool, invalid arguments) still stop at the step limit', async () => {
     for (const calls of [
       [{ name: 'no_such_tool', arguments: '{}' }],

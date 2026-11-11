@@ -782,6 +782,54 @@ function causes(err: unknown): Record<string, unknown>[] {
   return out
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === 'object' && !Array.isArray(value)
+
+/**
+ * Where a call gives null and the JSON Schema takes no null, as the model would write it: a required
+ * argument (`text`, `pages[0].page`) or an entry of a list (`options[1]`). Follows `properties`,
+ * `additionalProperties`, and `items`. An optional argument given as null is left to pi, which drops
+ * it, and a null is fine wherever the schema says it is a value.
+ */
+function misplacedNulls(schema: unknown, value: unknown, path = ''): string[] {
+  if (!isRecord(schema)) return []
+  if (Array.isArray(value)) {
+    const items = listItems(schema)
+    return value.flatMap((item, n) => {
+      const at = `${path}[${n}]`
+      if (item === null) return items !== undefined && !admitsNull(items) ? [at] : []
+      return misplacedNulls(items, item, at)
+    })
+  }
+  if (!isRecord(value)) return []
+  const properties = isRecord(schema.properties) ? schema.properties : {}
+  const required = Array.isArray(schema.required) ? schema.required : []
+  return Object.entries(value).flatMap(([key, item]) => {
+    const at = path ? `${path}.${key}` : key
+    const property = Object.hasOwn(properties, key) ? properties[key] : schema.additionalProperties
+    if (item === null) return required.includes(key) && !admitsNull(property) ? [at] : []
+    return misplacedNulls(property, item, at)
+  })
+}
+
+/** What a JSON Schema says the entries of a list are: its own `items`, or those of the list branch of a union. */
+function listItems(schema: Record<string, unknown>): unknown {
+  if (schema.items !== undefined) return schema.items
+  for (const branches of [schema.anyOf, schema.oneOf]) {
+    const list = Array.isArray(branches) ? branches.find((b) => isRecord(b) && b.items !== undefined) : undefined
+    if (isRecord(list)) return list.items
+  }
+  return undefined
+}
+
+/** Whether a JSON Schema takes null as a value: by its type, a constant, or a branch of a union. */
+function admitsNull(schema: unknown): boolean {
+  if (!isRecord(schema)) return false
+  const { type } = schema
+  if (type === 'null' || (Array.isArray(type) && type.includes('null')) || schema.const === null) return true
+  return [schema.anyOf, schema.oneOf].some((branches) => Array.isArray(branches) && branches.some(admitsNull))
+}
+
 interface Reporter {
   stop(reason: string): void
   changed(): void
@@ -793,6 +841,11 @@ interface Reporter {
  * and checks the result against `parameters`. A call that does not fit never reaches the tool or
  * `beforeToolCall`: the model gets pi's list of what is wrong with each argument. The tool gets the
  * converted copy, which it parses itself when it is defined with `defineTool` (tool.ts).
+ *
+ * One conversion is stopped before pi makes it: a null where the schema takes none, for a required
+ * argument or an entry of a list. pi would turn it into the text "null", 0, or false and run the tool
+ * with that, so a page could be titled "null". Such a call is refused like any other that does not
+ * fit, and the model is told where the nulls are.
  */
 function toAgentTool(spec: ToolSpec, reporter: () => Reporter): AgentTool {
   return {
@@ -800,6 +853,16 @@ function toAgentTool(spec: ToolSpec, reporter: () => Reporter): AgentTool {
     label: spec.name,
     description: spec.description,
     parameters: spec.parameters,
+    prepareArguments: (args) => {
+      const nulls = misplacedNulls(spec.parameters, args)
+      if (nulls.length) {
+        throw new Error(
+          `Not run: null is not a value for ${nulls.map((path) => `\`${path}\``).join(', ')}. ` +
+            'Give the call again with a value there, or ask the user for one.',
+        )
+      }
+      return args
+    },
     execute: async (_id, params, signal) => {
       const report = reporter()
       let result: unknown
