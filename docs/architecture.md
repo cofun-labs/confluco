@@ -9,7 +9,7 @@ Chrome
   Sign-in tab → Clerk Sync Host → side panel session
 ```
 
-The agent loop runs in the side panel. The Worker verifies the user and passes the conversation to the model. Each question includes the current supported Confluence page's title and canonical URL, read from Chrome's tab metadata. Workspace tools can read a published page, search, and browse spaces and page trees on an explicitly connected self-managed instance.
+The agent loop runs in the side panel. The Worker verifies the user and passes the conversation to the model. Each question includes the current supported Confluence page's title and canonical URL, read from Chrome's tab metadata. Workspace tools can read, search and navigate an explicitly connected self-managed instance, inspect version history and access, and change a published page's labels at the user's request.
 
 ## Tech choices
 
@@ -42,7 +42,9 @@ Conversations are saved in the extension's IndexedDB, one database per Clerk use
 
 ## Tool execution
 
-Tools register in `extension/src/tools.ts`. A tool's arguments, validation and JSON Schema come from one Zod schema through `defineTool`. The agent runs tools sequentially, streams their progress to the panel, supports per-call confirmation, and preserves completed tool history when a question is interrupted. Errors can stop a question and report whether data may have changed. The panel captures the active tab and configured instance when the question is sent. The shared transport uses that tab's isolated extension world for same-origin REST reads. It checks the document still matches the captured URL, refuses redirects and validates the transport result. Tools validate REST data, bound their output and generate canonical source links. Search and navigation use validated offsets to repeat the original request. Page references include the instance and page ID. Chrome site access is requested at connect time. Confluence cookies stay with the tab, and requested page text and search or navigation results go to the model as tool results.
+Tools register in `extension/src/tools.ts`. A tool's arguments, validation and JSON Schema come from one Zod schema through `defineTool`. The agent runs tools sequentially, streams their progress to the panel, supports per-call confirmation, and preserves completed tool history when a question is interrupted. Errors can stop a question and report whether data may have changed. The panel captures the active tab and configured instance when the question is sent. The shared transport uses that tab's isolated extension world for same-origin REST. It checks the document still matches the captured URL, refuses redirects and validates the transport result. Tools validate REST data, bound their output and generate canonical source links. Paginated reads use validated offsets to repeat the original request. Page references include the instance and page ID. Chrome site access is requested at connect time. Confluence cookies stay with the tab, and requested data goes to the model as tool results.
+
+The version list uses the experimental version endpoint on Confluence 8.5 when available. The current version and direct historical reads use the supported content endpoint. Access metadata is advisory. Before sending a question to the model, the panel records directly requested label changes from the user's message. The tool can apply those changes on the current published page in the requested order. It rechecks the page before writing and reads the labels back before reporting success. An uncertain write stops the question and asks the user to check the page.
 
 ## Layout
 
@@ -63,6 +65,8 @@ extension/                Chrome extension
   src/confluence/transport.ts  isolated-world REST transport bound to the captured tab and instance
   src/confluence/read-page.ts  current published-page read
   src/confluence/navigation.ts  search, space browsing and page hierarchy
+  src/confluence/history.ts  published versions and reported page access
+  src/confluence/labels.ts  paginated labels and confirmed mutations
   src/sidepanel/          React UI (main.tsx: sign-in, Chat.tsx: chat, Sessions.tsx: saved sessions,
                           ToolCall.tsx: one tool call and its changes)
   test/                   tests of client code and the whole panel in jsdom

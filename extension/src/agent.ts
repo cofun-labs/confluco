@@ -57,10 +57,10 @@ export interface ToolSpec {
   /**
    * The tool changes the user's data. When a question stops after such a tool ran and changed
    * something, or may have (its error has `mayHaveChanged`), the user is told to check before
-   * asking again, so they don't ask for a change twice. Every successful run counts, even one
-   * that changed nothing (an edit of no-ops): over-warning is the safe side.
+   * asking again, so they don't ask for a change twice. A predicate can distinguish a verified
+   * no-op from a successful write. A tool that cannot make that distinction can use `true`.
    */
-  changesData?: boolean
+  changesData?: boolean | ((result: unknown) => boolean)
   /**
    * What a call does, in words, from the state before it runs: shown on the call's card, and to the
    * user before agreeing when the tool needs confirmation. It may look things up first.
@@ -127,7 +127,7 @@ type AssistantPart =
 /** `requests`: how many requests the question's tools made, when it ran and the agent counts them. */
 export type AskResult = (
   | { status: 'done' }
-  | { status: 'stopped' }
+  | { status: 'stopped'; mayHaveChanged?: true }
   | { status: 'step_limit'; steps: number }
   | { status: 'error'; message: string }
 ) & { requests?: number }
@@ -168,7 +168,7 @@ export class CopilotAgent {
   /** Aborted with each epoch bump, so waits that pi doesn't cut short end too. */
   private cancel = new AbortController()
   /** The question this agent is answering; reset() clears it, since the next one gets a new pi agent. */
-  private running?: object
+  private running?: { changed: boolean }
   /** The conversation to start from, used when the next pi agent is set up. */
   private initial: HistoryMessage[] = []
   /** How each tool call ended, by its result message; pi itself only knows whether it failed. */
@@ -179,9 +179,6 @@ export class CopilotAgent {
   private readonly requests = new WeakMap<AgentMessage, number>()
   /** Set by a tool whose error stops the question (see `stopsQuestion`): what the user is told. */
   private stopReason?: string
-  /** Set by a tool that changes data and changed something, or may have (see `changesData`). */
-  private changed = false
-
   constructor(private readonly config: AgentConfig) {
     this.maxSteps = config.maxSteps ?? DEFAULT_MAX_STEPS
     this.confirmed = new Set(config.tools.filter((t) => t.needsConfirmation).map((t) => t.name))
@@ -200,7 +197,7 @@ export class CopilotAgent {
   async ask(text: string, onUpdate: (update: AgentUpdate) => void, confirm?: ConfirmTool): Promise<AskResult> {
     // One question at a time: an overlapping run would roll back the other's messages.
     if (this.running) return { status: 'error', message: 'Already answering a question.' }
-    const question = {}
+    const question = { changed: false }
     this.running = question
     try {
       return await this.askWithRetry(text, onUpdate, confirm)
@@ -244,6 +241,7 @@ export class CopilotAgent {
     epoch: number,
     confirm?: ConfirmTool,
   ): Promise<{ result: AskResult; kept: boolean; code?: string }> {
+    const run = this.running
     let agent: Agent
     try {
       agent = await this.getAgent()
@@ -257,7 +255,6 @@ export class CopilotAgent {
 
     const before = agent.state.messages.length
     this.stopReason = undefined
-    this.changed = false
     let steps = 0
     let hitLimit = false
     let failure: Failure | undefined
@@ -409,13 +406,14 @@ export class CopilotAgent {
     // finished. A stop after the final answer keeps it: the user has already read it.
     stopped ||= epoch !== this.epoch && !answered
     // A write that was sent counts even when the tool that sent it does not say it changed data.
-    const changed = this.changed || meter?.wrote === true
-    if (!stopped && this.stopReason)
-      failure ??= { text: changed ? `${this.stopReason} ${MAY_HAVE_CHANGED}` : this.stopReason }
+    const changed = run?.changed === true || meter?.wrote === true
+    if (!stopped && this.stopReason) failure ??= { text: this.stopReason }
     if (failure || stopped) {
       const kept = usedTools(agent.state.messages.slice(before))
       agent.state.messages = [...agent.state.messages.slice(0, before), ...kept]
-      const result: AskResult = stopped ? { status: 'stopped' } : { status: 'error', message: failure!.text }
+      const result: AskResult = stopped
+        ? { status: 'stopped', ...(changed && { mayHaveChanged: true }) }
+        : { status: 'error', message: changed ? `${failure!.text} ${MAY_HAVE_CHANGED}` : failure!.text }
       return { result: { ...result, ...counted }, kept: kept.length > 0, code: stopped ? undefined : failure?.code }
     }
     const result: AskResult = hitLimit ? { status: 'step_limit', steps } : { status: 'done' }
@@ -566,12 +564,14 @@ export class CopilotAgent {
    */
   private reporter(): Reporter {
     const epoch = this.epoch
+    const run = this.running
     return {
       stop: (reason) => {
         if (epoch === this.epoch) this.stopReason ??= reason
       },
       changed: () => {
-        if (epoch === this.epoch) this.changed = true
+        // A stopped write can report an uncertain outcome after the epoch changed.
+        if (run) run.changed = true
       },
     }
   }
@@ -843,7 +843,8 @@ function toAgentTool(spec: ToolSpec, reporter: () => Reporter): AgentTool {
         if (causes(err).some((e) => e.mayHaveChanged === true)) report.changed()
         throw err
       }
-      if (spec.changesData) report.changed()
+      const changed = typeof spec.changesData === 'function' ? spec.changesData(result) : spec.changesData
+      if (changed) report.changed()
       // JSON.stringify(undefined) is undefined; tool results must be strings.
       const text = typeof result === 'string' ? result : (JSON.stringify(result) ?? '')
       return { content: [{ type: 'text', text }], details: undefined }

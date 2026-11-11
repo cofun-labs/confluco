@@ -553,7 +553,8 @@ describe('extension agent against the worker', () => {
 
   it('[UC-AGENT-001-S12] stopping during a tool keeps the tools used so far, and drops what had not started', async () => {
     let agent: CopilotAgent
-    const { tool: rename, runs } = renameTool()
+    const { tool, runs } = renameTool()
+    const rename: ToolSpec = { ...tool, changesData: true }
     const slow: ToolSpec = {
       ...pageTool().tool,
       run: (_args, signal) =>
@@ -566,7 +567,7 @@ describe('extension agent against the worker', () => {
     // Step 1 renames the page. Step 2 reads it, and would rename it again, but Stop comes first.
     ai.script = [{ toolCalls: [RENAME_CALL] }, { toolCalls: [{ name: 'lookup_page', arguments: '{}' }, RENAME_CALL] }]
     const stopped = await ask(agent, 'Rename this page to Q4 Plan', async () => true)
-    expect(stopped.result).toEqual({ status: 'stopped' })
+    expect(stopped.result).toEqual({ status: 'stopped', mayHaveChanged: true })
     expect(runs).toHaveLength(1)
     // The tool cut short shows as stopped, not as a failure of its own; the last call never started.
     expect(toolStatuses(stopped.updates)).toEqual(['done', 'stopped'])
