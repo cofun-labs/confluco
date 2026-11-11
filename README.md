@@ -18,6 +18,7 @@
 | Chat | Stream replies, stop a running answer, and start a new conversation. |
 | Read a page | Ask about the published page on a connected self-managed Confluence 8.5 instance. |
 | Search and browse | Find published pages by title or text and explore spaces, homepages, ancestors and children on the connected instance. |
+| History and labels | Inspect older page versions and available operations. View, add, or remove ordinary page labels. |
 | Stay in context | Each question includes the current supported Confluence page's title and URL. |
 | Draft | Work with text you provide in the conversation. |
 | Keep sessions | Save conversations locally, search by title, filter by starting page, and continue earlier chats. |

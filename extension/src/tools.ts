@@ -1,4 +1,13 @@
 import {
+  accessArgs,
+  historicalArgs,
+  listVersions,
+  pageAccess,
+  readHistoricalVersion,
+  versionsArgs,
+} from './confluence/history'
+import { applyLabel, changeLabelArgs, labelsArgs, listLabels } from './confluence/labels'
+import {
   browseTree,
   getSpace,
   listSpaces,
@@ -47,6 +56,38 @@ export function createTools(currentTab: () => Promise<ConfluenceTab | undefined>
         'Read ancestors and direct children. Omit page for the active published page. For another page, use a reference returned by a Confluence tool.',
       args: treeArgs,
       run: async (args, signal) => browseTree(args, await currentTab(), signal),
+    }),
+    defineTool({
+      name: 'list_page_versions',
+      description: 'List versions of a published page. Omit page to use the current tab.',
+      args: versionsArgs,
+      run: async (args, signal) => listVersions(args, await currentTab(), signal),
+    }),
+    defineTool({
+      name: 'read_page_version',
+      description: 'Read the text of one older published version. Omit page to use the current tab.',
+      args: historicalArgs,
+      run: async (args, signal) => readHistoricalVersion(args, await currentTab(), signal),
+    }),
+    defineTool({
+      name: 'get_page_access',
+      description: 'See Confluence-reported operations and page restrictions. Omit page to use the current tab.',
+      args: accessArgs,
+      run: async ({ page }, signal) => pageAccess(page, await currentTab(), signal),
+    }),
+    defineTool({
+      name: 'list_page_labels',
+      description: 'List labels on a published page. Omit page to use the current tab.',
+      args: labelsArgs,
+      run: async (args, signal) => listLabels(args, await currentTab(), signal),
+    }),
+    defineTool({
+      name: 'change_page_label',
+      description:
+        'Add or remove one ordinary label when the user requests it. Omit page to use the current published page.',
+      args: changeLabelArgs,
+      changesData: true,
+      run: async (args, signal) => applyLabel(args, await currentTab(), signal),
     }),
   ]
 }

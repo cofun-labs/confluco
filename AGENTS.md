@@ -72,7 +72,7 @@ Confluco: a Chrome extension that opens an AI side panel next to Confluence page
 - **GitHub settings are code.** The `main` ruleset lives in `.github/rulesets/main.json` and repository options in `scripts/sync-github-settings.sh`. Change them through a PR; a repository admin then runs `scripts/sync-github-settings.sh`. If you change a setting in the GitHub dashboard, copy it back into these files.
 - **Never rewrite published history** (`git commit --amend`, `git rebase`) on pushed branches. Add new commits instead.
 - **Never force-push** unless explicitly asked.
-- Use [Conventional Commits](https://www.conventionalcommits.org/) for commits and PR titles: `feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `test:`.
+- Use [Conventional Commits](https://www.conventionalcommits.org/) for commits, PR titles and Issue titles. Use `feat(epic):` for feature epics.
 
 ## Language
 
@@ -90,7 +90,7 @@ This is an open-source repository. **Never commit account identifiers or secrets
 
 - `extension/`: Chrome MV3 side panel. Vite + React + TypeScript. Clerk sign-in through Sync Host. `vite.config.ts` generates `manifest.json` from `.env.local`; checks use `.env.smoke`. The agent loop runs in the side panel on `@earendil-works/pi-agent-core`; only `src/agent.ts` imports pi, and tools live in `src/tools.ts`.
 - `worker/`: Cloudflare Worker with Hono. Serves `/login`, verifies Clerk session JWTs locally, and proxies OpenAI-compatible `/v1/chat/completions` to Workers AI through AI Gateway.
-- `extension/src/confluence/tab.ts` recognizes supported Cloud and self-hosted Confluence URLs and reads tab metadata for session labels and per-question context. The tool registry exposes published-page reads, search and navigation for explicitly connected self-managed instances.
+- `extension/src/confluence/tab.ts` recognizes supported Cloud and self-hosted Confluence URLs and reads tab metadata for session labels and per-question context. The tool registry exposes published-page reads, search, navigation, history, access and label changes for explicitly connected self-managed instances.
 - **Module boundaries are lint errors** in `.oxlintrc.json`. Only `src/agent.ts` imports pi and calls the Worker with `fetch`. Only `src/confluence/transport.ts` uses `chrome.scripting` and sends Confluence REST requests. Extension source never uses `chrome.debugger`. Zod is imported through `extension/src/zod.ts` and `worker/src/zod.ts`, which set up each runtime. The Confluence layer imports nothing from the agent, tools, sessions or UI. Change the documented boundary and the lint rule together when a feature needs it. Never bypass a module boundary with an `oxlint-disable` comment.
 
 ## Untrusted values
@@ -105,7 +105,7 @@ Reads from the existing IndexedDB session store still use typed requests and hav
 
 ## Workspace tools
 
-When adding workspace tools, keep the user's account stable. Retry only when the operation is safe to repeat and the cause can be fixed by a retry. Stop on rate limits and failures whose outcome is unknown. Preserve an error's `stopsQuestion` and `mayHaveChanged` information. Mark a tool that changes data with `changesData`, and use the agent's confirmation support for actions that require approval. Keep all Confluence requests in the designated transport and validate responses before giving results to tools.
+When adding workspace tools, keep the user's account stable. Retry only when the operation is safe to repeat and the cause can be fixed by a retry. Stop on rate limits and failures whose outcome is unknown. Preserve an error's `stopsQuestion` and `mayHaveChanged` information. Mark a tool that changes data with `changesData`. An explicit user request authorizes an ordinary change such as adding or removing a label. Require per-action confirmation for high-risk changes such as deleting a page. Keep all Confluence requests in the designated transport and validate responses before giving results to tools.
 
 ## Testing
 

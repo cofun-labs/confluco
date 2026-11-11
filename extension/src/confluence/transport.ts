@@ -32,6 +32,7 @@ const result = z.discriminatedUnion('kind', [
       'rejected',
       'forbidden',
       'missing',
+      'unsupported',
       'limited',
       'large',
       'network',
@@ -47,41 +48,83 @@ const errors = {
   rejected: 'Confluence rejected the request. Check the search text, space key or page reference.',
   forbidden: 'Your Confluence account does not have permission for this request.',
   missing: 'The requested Confluence item is missing or is not visible to your account.',
+  unsupported: 'This Confluence instance does not support the requested operation.',
   limited: 'Confluence rate-limited this request. Wait before asking again.',
   large: 'The Confluence response was too large to read.',
   network: 'Could not complete the request to Confluence. Check the site and try again.',
   invalid: 'Confluence did not return the expected response.',
 } satisfies Record<Exclude<z.infer<typeof result>['kind'], 'ok'>, string>
 
-export function refuse(message: string): never {
-  throw Object.assign(new Error(message), { stopsQuestion: message })
+export function refuse(message: string, mayHaveChanged = false): never {
+  throw Object.assign(new Error(message), { stopsQuestion: message, mayHaveChanged })
 }
 
 type Query = Record<string, string>
+export type RestArea = 'api' | 'experimental'
+type RestRequest = {
+  area: RestArea
+  resource: string
+  query: Query
+  method: 'GET' | 'POST' | 'DELETE'
+  body?: string
+}
+
+export class ConfluenceRequestError extends Error {
+  readonly stopsQuestion: string
+
+  constructor(readonly kind: keyof typeof errors) {
+    super(errors[kind])
+    this.stopsQuestion = this.message
+  }
+}
 
 export function requireTab(tab: ConfluenceTab | undefined): ConfluenceTab {
   if (!tab) refuse('Connect a self-managed Confluence instance and open a page on it first.')
   return tab
 }
 
-export function restUrl(instance: Instance, resource: string, query: Query = {}): URL {
-  const endpoint = new URL(instance.origin + instance.path + '/rest/api/' + resource)
+export function restUrl(instance: Instance, resource: string, query: Query, area: RestArea): URL {
+  const endpoint = new URL(`${instance.origin}${instance.path}/rest/${area}/${resource}`)
   endpoint.search = new URLSearchParams(query).toString()
   return endpoint
 }
 
-export async function getConfluence(
+export function getConfluence(
   target: ConfluenceTab,
   resource: string | null,
   query: Query,
   signal?: AbortSignal,
+  area: RestArea = 'api',
 ) {
+  // Chrome drops null properties when serializing injected arguments.
+  return sendConfluence(target, { area, resource: resource ?? 'current-page', query, method: 'GET' }, signal)
+}
+
+type LabelWrite = { method: 'POST'; body: unknown } | { method: 'DELETE'; query: Query }
+
+export function writeConfluenceLabel(target: ConfluenceTab, id: string, write: LabelWrite, signal?: AbortSignal) {
+  return sendConfluence(
+    target,
+    {
+      area: 'api',
+      resource: `content/${id}/label`,
+      method: write.method,
+      query: write.method === 'DELETE' ? write.query : {},
+      ...(write.method === 'POST' && { body: JSON.stringify(write.body) }),
+    },
+    signal,
+  )
+}
+
+async function sendConfluence(target: ConfluenceTab, request: RestRequest, signal?: AbortSignal) {
   signal?.throwIfAborted()
   if (!(await chrome.permissions.contains({ origins: [target.instance.permission] }))) {
     refuse('Confluco needs Chrome site access. Reconnect this Confluence instance and try again.')
   }
   signal?.throwIfAborted()
 
+  const writing = request.method !== 'GET'
+  const uncertain = () => refuse('The label change may have been applied. Check the page before trying again.', true)
   const requestId = crypto.randomUUID()
   const injection = {
     target: { tabId: target.tabId },
@@ -102,22 +145,31 @@ export async function getConfluence(
       chrome.scripting.executeScript({
         ...injection,
         func: requestConfluence,
-        args: [target.url, target.instance.path, resource, query, requestId],
+        args: [target.url, target.instance.path, request, requestId],
       }),
       stopped,
     ])
     raw = frame?.result
   } catch {
+    if (writing) uncertain()
     signal?.throwIfAborted()
     refuse('Could not access the Confluence tab. Check its site permission and try again.')
   } finally {
     if (onAbort) signal?.removeEventListener('abort', onAbort)
   }
+  if (signal?.aborted && writing) uncertain()
   signal?.throwIfAborted()
 
   const response = result.safeParse(raw)
-  if (!response.success) refuse(errors.invalid)
-  if (response.data.kind !== 'ok') refuse(errors[response.data.kind])
+  if (!response.success) {
+    if (writing) uncertain()
+    refuse(errors.invalid)
+  }
+  if (response.data.kind !== 'ok') {
+    const { kind } = response.data
+    if (writing && ['auth', 'large', 'network', 'invalid'].includes(kind)) uncertain()
+    throw new ConfluenceRequestError(kind)
+  }
   return response.data
 }
 
@@ -131,18 +183,15 @@ function abortRequest(requestId: string) {
 }
 
 /** Chrome serializes this function into the top-level page. Keep its dependencies inside it. */
-async function requestConfluence(
-  expectedUrl: string,
-  contextPath: string,
-  resource: string | null,
-  query: Query,
-  requestId: string,
-) {
+async function requestConfluence(expectedUrl: string, contextPath: string, request: RestRequest, requestId: string) {
   const actual = new URL(location.href)
   actual.hash = ''
   if (actual.href !== expectedUrl) return { kind: 'changed' }
+  const { area, query, method, body } = request
+  let { resource } = request
   let pageId: string | undefined
-  if (resource === null) {
+  if (resource === 'current-page') {
+    if (area !== 'api' || method !== 'GET') return { kind: 'invalid' }
     const path = actual.pathname.slice(contextPath.length).replace(/;[^/]*|%3bjsessionid(?:=|%3d)[^/]*/gi, '')
     const metaId = document.querySelector<HTMLMetaElement>('meta[name="ajs-page-id"]')?.content
     const type = document.querySelector<HTMLMetaElement>('meta[name="ajs-content-type"]')?.content
@@ -158,7 +207,10 @@ async function requestConfluence(
     resource = 'content/' + pageId
   }
 
-  const apiPath = contextPath + '/rest/api/'
+  if (area === 'experimental' && (method !== 'GET' || !/^content\/\d{1,20}\/version$/.test(resource)))
+    return { kind: 'invalid' }
+  if (method !== 'GET' && !/^content\/\d{1,20}\/label$/.test(resource)) return { kind: 'invalid' }
+  const apiPath = `${contextPath}/rest/${area}/`
   const endpoint = new URL(actual.origin + apiPath + resource)
   if (endpoint.origin !== actual.origin || !endpoint.pathname.startsWith(apiPath) || endpoint.hash || endpoint.search)
     return { kind: 'invalid' }
@@ -170,11 +222,12 @@ async function requestConfluence(
   const cap = 1_000_000
   try {
     const response = await fetch(endpoint.href, {
-      method: 'GET',
+      method,
       credentials: 'same-origin',
       redirect: 'manual',
       referrerPolicy: 'no-referrer',
-      headers: { Accept: 'application/json' },
+      headers: { Accept: 'application/json', ...(body !== undefined && { 'Content-Type': 'application/json' }) },
+      body,
       signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)]),
     })
     if (
@@ -186,8 +239,10 @@ async function requestConfluence(
     if (response.status === 400) return { kind: 'rejected' }
     if (response.status === 403) return { kind: 'forbidden' }
     if (response.status === 404) return { kind: 'missing' }
+    if (response.status === 405 || response.status === 501) return { kind: 'unsupported' }
     if (response.status === 429) return { kind: 'limited' }
     if (!response.ok) return { kind: 'network' }
+    if (response.status === 204 && method === 'DELETE') return { kind: 'ok', data: null }
     const contentType = response.headers.get('content-type') ?? ''
     if (/text\/html/i.test(contentType)) return { kind: 'auth' }
     if (!/^application\/json(?:;|$)/i.test(contentType)) return { kind: 'invalid' }

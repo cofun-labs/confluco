@@ -82,7 +82,14 @@ export class FakeBrowser {
         return this.confluenceResponse(url, init)
       },
     })
-    const result: unknown = await runInNewContext(`(${func.toString()})(...args)`, Object.assign(world, { args }))
+    // Chrome's extension API argument serializer drops null dictionary properties.
+    const injectedArgs: unknown = JSON.parse(
+      JSON.stringify(args, (_key, value) => (value === null ? undefined : value)),
+    )
+    const result: unknown = await runInNewContext(
+      `(${func.toString()})(...args)`,
+      Object.assign(world, { args: injectedArgs }),
+    )
     return [{ result }]
   }
 
