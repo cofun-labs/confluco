@@ -30,11 +30,11 @@ export type PageWriteRequest =
   | { action: 'rename'; title: string; targetUrl?: string }
 
 const createEnglish =
-  /^(?:please\s+)?create\s+(?:a\s+)?(?:published\s+)?(?:child\s+)?page\s+(?:(?:called|named|titled)\s+)?(?<title>"[^"\r\n]+"|“[^”\r\n]+”|`[^`\r\n]+`)(?:\s+in\s+space\s+(?<space>"[^"]+"|[^\s]+?))?(?:\s+under\s+(?:this\s+page|(?<target>https?:\/\/[^\s]+)))?(?:\s+with\s+text\s+(?<text>"[^"]*"|“[^”]*”|`[^`]*`))?[.!]?$/iu
+  /^(?:please\s+)?create\s+(?:a\s+)?(?:published\s+)?(?:child\s+)?page\s+(?:(?:called|named|titled)\s+)?(?<title>"[^"\r\n]+"|“[^”\r\n]+”|`[^`\r\n]+`)(?:\s+in\s+space\s+(?<space>"[^"]+"|[^\s]+))?\s+under\s+(?:this\s+page|(?<target>https?:\/\/[^\s]+))(?:\s+with\s+text\s+(?<text>"[^"]*"|“[^”]*”|`[^`]*`))?[.!]?$/iu
 const renameEnglish =
   /^(?:please\s+)?rename\s+(?:this\s+page|(?:page\s+)?(?<target>https?:\/\/[^\s]+))\s+to\s+(?<title>"[^"\r\n]+"|“[^”\r\n]+”|`[^`\r\n]+`)[.!]?$/iu
 const createChinese =
-  /^(?:请\s*)?(?:在(?:当前(?:的)?页面?|本页|这(?:个)?页面?)下\s*)?创建(?:一个)?(?:子)?页面\s*(?<title>"[^"\r\n]+"|“[^”\r\n]+”|`[^`\r\n]+`)(?:\s*[，,]?\s*(?:正文|内容)(?:是|为)?\s*[：:]?\s*(?<text>"[^"]*"|“[^”]*”|`[^`]*`))?[。！!]?$/u
+  /^(?:请\s*)?在(?:当前(?:的)?页面?|本页|这(?:个)?页面?)下\s*创建(?:一个)?(?:子)?页面\s*(?<title>"[^"\r\n]+"|“[^”\r\n]+”|`[^`\r\n]+`)(?:\s*[，,]?\s*(?:正文|内容)(?:是|为)?\s*[：:]?\s*(?<text>"[^"]*"|“[^”]*”|`[^`]*`))?[。！!]?$/u
 const renameChinese =
   /^(?:请\s*)?(?:把|将)?(?:当前(?:的)?页面?|本页|这(?:个)?页面?)\s*(?:重命名为|改名为|改成)\s*(?<title>"[^"\r\n]+"|“[^”\r\n]+”|`[^`\r\n]+`)[。！!]?$/u
 

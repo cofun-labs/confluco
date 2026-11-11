@@ -150,6 +150,8 @@ describe('create a published page', () => {
 
   it.each([
     ['Summarize this page', createCall, false],
+    ['Create page "Child fixture" in space TEST', createCall, false],
+    ['创建页面“Child fixture”', createCall, false],
     [command, { ...createCall, arguments: '{"title":"Forged title"}' }, false],
     [
       'Create page "Child fixture" under https://other.example.test/kb/pages/viewpage.action?pageId=42',
