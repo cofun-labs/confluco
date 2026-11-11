@@ -105,7 +105,7 @@ Reads from the existing IndexedDB session store still use typed requests and hav
 
 ## Workspace tools
 
-When adding workspace tools, keep the user's account stable. Retry only when the operation is safe to repeat and the cause can be fixed by a retry. Stop on rate limits and failures whose outcome is unknown. Preserve an error's `stopsQuestion` and `mayHaveChanged` information. Mark a tool that changes data with `changesData`. An explicit user request authorizes an ordinary change such as adding or removing a label. Require per-action confirmation for high-risk changes such as deleting a page. Keep all Confluence requests in the designated transport and validate responses before giving results to tools.
+When adding workspace tools, keep the user's account stable. Retry only when the operation is safe to repeat and the cause can be fixed by a retry. Stop on rate limits and failures whose outcome is unknown. Preserve an error's `stopsQuestion` and `mayHaveChanged` information. Mark a tool that changes data with `changesData`. An explicit user request authorizes an ordinary change such as adding or removing a label. Bind that authorization to the user's request and intended target outside the model. Require per-action confirmation for high-risk changes such as deleting a page. Keep all Confluence requests in the designated transport and validate responses before giving results to tools.
 
 ## Testing
 

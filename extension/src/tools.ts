@@ -6,7 +6,7 @@ import {
   readHistoricalVersion,
   versionsArgs,
 } from './confluence/history'
-import { applyLabel, changeLabelArgs, labelsArgs, listLabels } from './confluence/labels'
+import { applyLabel, changeLabelArgs, labelsArgs, listLabels, type LabelRequest } from './confluence/labels'
 import {
   browseTree,
   getSpace,
@@ -22,7 +22,13 @@ import type { ConfluenceTab } from './confluence/transport'
 import { defineTool } from './tool'
 import { z } from './zod'
 
-export function createTools(currentTab: () => Promise<ConfluenceTab | undefined> | undefined) {
+export interface WorkspaceQuestion {
+  tab: Promise<ConfluenceTab | undefined>
+  labelChanges: LabelRequest[]
+}
+
+export function createTools(currentQuestion: () => WorkspaceQuestion) {
+  const currentTab = () => currentQuestion().tab
   return [
     defineTool({
       name: 'read_page',
@@ -83,11 +89,20 @@ export function createTools(currentTab: () => Promise<ConfluenceTab | undefined>
     }),
     defineTool({
       name: 'change_page_label',
-      description:
-        'Add or remove one ordinary label when the user requests it. Omit page to use the current published page.',
+      description: 'Add or remove the exact label requested by the user on the current published page.',
       args: changeLabelArgs,
       changesData: true,
-      run: async (args, signal) => applyLabel(args, await currentTab(), signal),
+      run: async (args, signal) => {
+        signal?.throwIfAborted()
+        const question = currentQuestion()
+        const next = question.labelChanges[0]
+        if (next?.action !== args.action || next.label !== args.label.toLowerCase())
+          throw new Error(
+            'Only the user can request a label change. Ask them to say “Add label NAME” or “Remove label NAME” on the intended page.',
+          )
+        question.labelChanges.shift()
+        return applyLabel(next, await question.tab, signal)
+      },
     }),
   ]
 }
