@@ -16,7 +16,7 @@ Key constraints:
 
 - Tools run in the extension, never on the server. The server only carries the AI's request to run a tool and the result back.
 - A tool marked as requiring confirmation runs only after the user agrees for that call. Declining it lets the agent continue without it. Stopping the agent ends the question.
-- Tool definitions, tool requests, and tool results are part of the conversation: the same size limits, quota, and usage records apply, and none of their content is kept by the service. Each round trip to the model counts as one request against the daily quota (UC-CHAT-001).
+- Tool definitions, tool requests, and tool results are part of the conversation: the same size limits, quota, and usage records apply, and usage records omit their content. Each round trip to the model counts as one request against the daily quota (UC-CHAT-001).
 
 ## Scenarios
 
@@ -26,8 +26,8 @@ Key constraints:
 | --- | --- | --- | --- |
 | UC-AGENT-001-S01 | P0 | ✅ | Given a signed-in user and a tool the extension offers; when they ask something that needs that tool; then the reply asks the extension to run it, with its arguments, instead of answering. |
 | UC-AGENT-001-S02 | P0 | ✅ | Given the result of a tool the extension ran; when it is sent back with the conversation; then the AI answers using it. |
-| UC-AGENT-001-S03 | P0 | ✅ | Given a signed-in user who uses tools; when they ask the AI; then nothing in the tool definitions, tool requests, or tool results is kept by the service. |
-| UC-AGENT-001-S04 | P0 | ✅ | Given a question that needs a tool; when the user asks it in the side panel; then the tool runs in the extension and the answer uses its result. |
+| UC-AGENT-001-S22 | P0 | ✅ | Given a signed-in user who uses tools; when they ask the AI; then usage records omit the content of tool definitions, tool calls and tool results. |
+| UC-AGENT-001-S23 | P0 | ✅ | Given a question that needs an available tool; when the assistant handles it; then the tool runs in the extension and the answer uses its result. |
 | UC-AGENT-001-S05 | P1 | ✅ | Given a model that keeps calling tools; when the question reaches its step limit; then the agent stops without running more tools and tells the user, and the next question still works. |
 | UC-AGENT-001-S09 | P0 | ✅ | Given a tool that needs confirmation; when the user declines it; then it does not run, and the agent continues without it. |
 | UC-AGENT-001-S10 | P0 | ✅ | Given a tool that needs confirmation; when the user agrees; then it runs and the answer uses its result. |

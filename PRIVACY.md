@@ -32,7 +32,7 @@ Sign in opens the configured Sync Host's `/login` page in a normal tab. It loads
 - It sends the conversation to Cloudflare Workers AI and streams the reply. AI Gateway is optional. The bundled Worker disables Gateway prompt/reply log collection and caching, retaining request analytics. See [Cloudflare's privacy policy](https://www.cloudflare.com/privacypolicy/).
 - A Durable Object keeps each user's daily request counter.
 - Each authenticated chat request produces a usage record containing user ID, model, outcome, finish reason, streaming mode, message count, input size, token counts and duration. Prompt and reply text is excluded. Analytics Engine retains these records for 90 days.
-- Workers Logs contain invocation metadata such as time, URL and status, plus errors the Worker prints. The Worker does not write conversation text to these logs. A provider failure is logged as the provider returns it.
+- Workers Logs contain invocation metadata such as time, URL and status. Provider failures are logged as the provider returns them. These diagnostic logs are separate from the usage records described above.
 
 ## What stays on your device
 
@@ -42,7 +42,7 @@ Clerk keeps its client token in `chrome.storage.local`. That local sign-in stora
 
 ## What is never collected
 
-The extension has no advertising or analytics tracking and loads no remote executable code. The Worker stores request metadata without conversation text. Confluco does not read browsing history or content from other sites. Data is used to provide the assistant.
+The extension has no advertising or analytics tracking and loads no remote executable code. Usage records exclude conversation text. Confluco does not read browsing history or content from other sites. Data is used to provide the assistant.
 
 ## Changes and contact
 

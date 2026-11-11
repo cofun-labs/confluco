@@ -128,9 +128,10 @@ export class BrowserLock {
   }
 }
 
-/** Owners are matched as the text before the first " |", like the shell script does. */
+/** Owners are matched as the text before the first " |", in the owner file. */
 export function checkOwner(owner: string): void {
-  if (!owner.trim() || /[|\n\r]/.test(owner)) throw new Error(`Not a usable lock owner: ${JSON.stringify(owner)}`)
+  if (!owner || owner.trim() !== owner || /[|\n\r]/.test(owner))
+    throw new Error(`Not a usable lock owner: ${JSON.stringify(owner)}`)
 }
 
 function oneLine(text: string): string {

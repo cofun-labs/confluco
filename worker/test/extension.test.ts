@@ -144,7 +144,7 @@ describe('extension agent against the worker', () => {
     ])
   })
 
-  it('[UC-AGENT-001-S04] a tool the model asks for runs in the extension and the answer uses its result', async () => {
+  it('[UC-AGENT-001-S23] a tool the model asks for runs in the extension and the answer uses its result', async () => {
     const { tool, runs } = pageTool()
     ai.script = [{ toolCalls: [{ name: 'lookup_page', arguments: '{}' }] }, { reply: 'You are on Q4 Roadmap' }]
     const { result, updates, reply } = await ask(makeAgent({ tools: [tool] }), 'Which page am I on?')

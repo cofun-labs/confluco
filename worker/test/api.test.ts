@@ -397,7 +397,7 @@ describe("UC-CHAT-002 Keep a record of each user's chat usage", () => {
     expect(records().map((r) => r.outcome)).toEqual(['incomplete'])
   })
 
-  it('[UC-CHAT-002-S03] nothing users wrote or the AI replied is kept', async () => {
+  it('[UC-CHAT-002-S04] usage records exclude messages and replies', async () => {
     const SECRET = 'zebra-7f3a-confidential'
     ai = env.AI = new FakeAiBinding(`reply ${SECRET}-reply`)
     const messages = [
@@ -655,7 +655,7 @@ describe('UC-AGENT-001 Ask the AI something that needs a tool', () => {
     ])
   })
 
-  it('[UC-AGENT-001-S03] nothing in tool definitions, calls, or results is kept', async () => {
+  it('[UC-AGENT-001-S22] usage records exclude tool definitions, calls, and results', async () => {
     const SECRET = 'okapi-91c2-confidential'
     ai = env.AI = new FakeAiBinding(`checking ${SECRET}-preamble`)
     ai.toolCalls = [{ name: 'search_pages', arguments: JSON.stringify({ query: `${SECRET}-arguments` }) }]

@@ -171,7 +171,7 @@ export async function ownPanel(browser: Browser, state: State): Promise<Target> 
 }
 
 export interface AskResult {
-  status: 'done' | 'needs_answer'
+  status: 'done' | 'error' | 'needs_answer'
   parts: ReplyPart[]
 }
 
@@ -211,7 +211,7 @@ export async function ask(
   for (;;) {
     snap = await panel.evaluate(readPanel, [], PanelSnapshotSchema)
     const step = nextStep(snap, expected, answer)
-    if (step === 'done' || step === 'needs_answer') return { status: step, parts: snap.parts }
+    if (step === 'done' || step === 'error' || step === 'needs_answer') return { status: step, parts: snap.parts }
     if (step === 'unanswerable') {
       throw new E2eError('A tool call waits for approval, but the side panel shows no Allow or Deny for it.')
     }

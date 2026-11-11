@@ -24,7 +24,7 @@ export const PanelSnapshotSchema = z.object({
 })
 export type PanelSnapshot = z.infer<typeof PanelSnapshotSchema>
 
-export type Step = 'wait' | 'done' | 'needs_answer' | 'unanswerable' | { click: Answer }
+export type Step = 'wait' | 'done' | 'error' | 'needs_answer' | 'unanswerable' | { click: Answer }
 
 /**
  * What to do next while waiting for reply number `expected`: keep waiting, answer an approval
@@ -36,7 +36,8 @@ export function nextStep(snap: PanelSnapshot, expected: number, answer?: Answer)
   if (snap.asking) return answer ? { click: answer } : 'needs_answer'
   // A call waiting for approval that shows no Allow/Deny buttons can never be answered.
   if (snap.parts.some((p) => p.type === 'tool' && p.status === 'confirm')) return 'unanswerable'
-  return snap.busy ? 'wait' : 'done'
+  if (snap.busy) return 'wait'
+  return snap.parts.some((part) => part.type === 'error') ? 'error' : 'done'
 }
 
 /** A reply for reading in a terminal: text as is, then each tool call with its sections indented. */

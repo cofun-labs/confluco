@@ -24,6 +24,11 @@ describe('nextStep', () => {
     expect(nextStep(snap({ replies: 2 }), 2)).toBe('done')
   })
 
+  it('reports an ended reply with an error as failed', () => {
+    const parts = [{ type: 'error' as const, text: 'Sign in again.' }]
+    expect(nextStep(snap({ replies: 2, parts }), 2)).toBe('error')
+  })
+
   it('answers an approval prompt as told', () => {
     expect(nextStep(snap({ replies: 2, busy: true, asking: true }), 2, 'allow')).toEqual({ click: 'allow' })
     expect(nextStep(snap({ replies: 2, busy: true, asking: true }), 2, 'deny')).toEqual({ click: 'deny' })

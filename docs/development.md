@@ -98,12 +98,6 @@ For a dedicated deployment, connect `kitfun/confluco` under Workers & Pages → 
 
 ## Extension
 
-```bash
-pnpm build        # outputs extension/dist
-```
-
-In `chrome://extensions`, turn on Developer mode, click "Load unpacked", and pick `extension/dist`.
-
 Copy `extension/.env.example` to `extension/.env.local` and configure your Worker and Clerk instance. The checked-in `extension/.env.smoke` uses synthetic hosts exclusively for tests. `pnpm check` builds that configuration into `extension/dist-smoke`, while `pnpm build` writes your configured build to `extension/dist`.
 
 | Variable | Description |
@@ -120,11 +114,17 @@ Generate your own signing key and extension ID:
 mkdir -p extension/keys
 openssl genrsa -out extension/keys/crx-private.pem 2048
 openssl rsa -in extension/keys/crx-private.pem -pubout -outform DER > extension/keys/pub.der
-base64 -i extension/keys/pub.der | tr -d '\n'                          # CRX_PUBLIC_KEY
+openssl base64 -A -in extension/keys/pub.der                          # CRX_PUBLIC_KEY
 shasum -a 256 extension/keys/pub.der | cut -c1-32 | tr '0-9a-f' 'a-p'  # extension ID
 ```
 
 In the Clerk dashboard, enable the Native API (Native applications page) so the Chrome extension can sign in.
+
+```bash
+pnpm build        # outputs extension/dist
+```
+
+In `chrome://extensions`, turn on Developer mode, click "Load unpacked", and pick `extension/dist`.
 
 ### Reuse an existing Worker
 

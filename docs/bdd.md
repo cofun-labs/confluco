@@ -68,7 +68,7 @@ pnpm e2e lock release
 - **Account setup.** The CLI reports missing sign-in, Developer mode or extension setup so a person can finish those steps in the dedicated profile.
 - **Own tabs.** `panel` opens the URL supplied by the tester in a tab owned by this run. `close` closes that tab and its panel. The CLI provides no workspace content creation or deletion commands.
 - **Approvals.** `ask --allow` or `ask --deny` answers every confirmation prompt that way. Without either, the CLI stops at a prompt with exit code 4 and prints what would change. `pnpm e2e ask --allow` continues the waiting reply.
-- **Output.** `ask` prints model text and every tool call, its status, arguments and result, in order. `--json` emits the same reply as JSON.
+- **Output.** `ask` prints model text and every tool call, its status, arguments and result, in order. `--json` emits the same reply as JSON. A reply that ends with a panel error exits with code 1 and prints the visible error with any partial reply.
 
 Record each run in the PR description or a comment: the scenario ID, the commit it ran on, the commands, and the reply's tool calls and results that show the scenario's "then", plus anything you checked in Confluence directly. Leave out account ids, emails, and the titles or content of the workspace's own pages.
 

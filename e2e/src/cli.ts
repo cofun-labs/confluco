@@ -128,6 +128,7 @@ async function browserCommand(
         if (command.json) console.log(JSON.stringify(result, null, 2))
         else console.log(formatReply(result.parts))
         if (result.status === 'done') return 0
+        if (result.status === 'error') return 1
         console.error('\nWaiting for approval: run pnpm e2e ask --allow or pnpm e2e ask --deny.')
         return EXIT_NEEDS_ANSWER
       } catch (err) {
@@ -170,17 +171,22 @@ async function main(argv: string[]): Promise<number> {
     try {
       return await browserCommand(new Browser(cdp), state, command, () => saveState(path, state))
     } finally {
-      await saveState(path, state)
-      cdp.close()
+      try {
+        await saveState(path, state)
+      } finally {
+        cdp.close()
+      }
     }
   })
 }
 
 main(process.argv.slice(2)).then(
-  (code) => process.exit(code),
+  (code) => {
+    process.exitCode = code
+  },
   (err: unknown) => {
     console.error(`error: ${err instanceof Error ? err.message : String(err)}`)
     if (err instanceof UsageError) console.error(`\n${USAGE}`)
-    process.exit(err instanceof UsageError ? 2 : err instanceof E2eError ? err.exitCode : 1)
+    process.exitCode = err instanceof UsageError ? 2 : err instanceof E2eError ? err.exitCode : 1
   },
 )

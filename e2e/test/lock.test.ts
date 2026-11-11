@@ -131,6 +131,6 @@ describe('BrowserLock', () => {
 describe('checkOwner', () => {
   it('refuses owners the owner file could not tell apart', () => {
     expect(() => checkOwner('issue-106')).not.toThrow()
-    for (const bad of ['', '  ', 'a | b', 'a\nb']) expect(() => checkOwner(bad)).toThrow()
+    for (const bad of ['', '  ', ' issue-106', 'issue-106 ', 'a | b', 'a\nb']) expect(() => checkOwner(bad)).toThrow()
   })
 })
