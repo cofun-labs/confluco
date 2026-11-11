@@ -373,6 +373,12 @@ export function Chat({ userId }: { userId: string }) {
     }
   }
 
+  const reply = messages.at(-1)
+  const activePreview =
+    view === 'sessions' && reply?.role === 'assistant'
+      ? reply.parts.find((part) => part.type === 'tool' && part.tool.status === 'running' && part.tool.preview)
+      : undefined
+
   return (
     <>
       <div className="toolbar">
@@ -386,6 +392,12 @@ export function Chat({ userId }: { userId: string }) {
       </div>
 
       {showConnection && <ConfluenceConnection userId={userId} onClose={() => setShowConnection(false)} />}
+
+      {activePreview?.type === 'tool' && (
+        <div className="note" role="status">
+          {activePreview.tool.preview}
+        </div>
+      )}
 
       {view === 'sessions' && (
         <Sessions

@@ -123,6 +123,35 @@ describe('create a published page', () => {
     expect(writes(browser)).toEqual([])
   })
 
+  it('keeps the planned change visible when the user opens Sessions before the write', async () => {
+    const { browser, user } = await openPanel()
+    const parentResponse = pendingResponse()
+    const writeResponse = pendingResponse()
+    const created = { ...child, body: { storage: storage('<p></p>') } }
+    browser.confluenceResponse = (url, init) => {
+      const path = new URL(url).pathname
+      if (init?.method === 'POST') {
+        expect(screen.getByRole('status')).toBeVisible()
+        expect(screen.getByRole('status')).toHaveTextContent('Create "Child fixture" under "Parent fixture"')
+        return writeResponse.promise
+      }
+      if (path === contentPath) return Response.json({ results: [] })
+      if (path === `${contentPath}/99`) return Response.json(created)
+      return browser.workspaceRequests.length === 1 ? parentResponse.promise : Response.json(parent)
+    }
+    browser.ai.script.push({ toolCalls: [createCall] }, { reply: 'Created from the active chat.' })
+    await ask(user, command)
+    await screen.findByRole('img', { name: 'Running' })
+    await user.click(screen.getByRole('button', { name: 'Sessions' }))
+    expect(writes(browser)).toEqual([])
+    parentResponse.release(Response.json(parent))
+    expect(await screen.findByRole('status')).toBeVisible()
+    expect(writes(browser)).toHaveLength(1)
+    writeResponse.release(Response.json(created))
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(await screen.findByText('Created from the active chat.')).toBeVisible()
+  })
+
   it.each([
     [403, /does not have permission/],
     [503, /change may have been applied/],
