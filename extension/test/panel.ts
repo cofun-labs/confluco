@@ -55,6 +55,11 @@ export class FakeBrowser {
     this.active = tab
   }
 
+  setConnectionFromAnotherPanel(userId: string, base: string, permission: string) {
+    this.settings[`confluence-instance:${userId}`] = base
+    this.sites.add(permission)
+  }
+
   private async executeScript({ target, func, args }: Injection) {
     const tab = this.tabs.get(target.tabId)
     if (!tab?.url) throw new Error('No such tab')
@@ -98,6 +103,20 @@ export class FakeBrowser {
       app.request(new Request(input, init), undefined, env)
     // A new browser profile: no saved sessions.
     globals.indexedDB = new IDBFactory()
+    let lockQueue = Promise.resolve()
+    Object.defineProperty(navigator, 'locks', {
+      configurable: true,
+      value: {
+        request: <T>(_name: string, action: () => Promise<T>) => {
+          const result = lockQueue.then(action)
+          lockQueue = result.then(
+            () => {},
+            () => {},
+          )
+          return result
+        },
+      },
+    })
 
     browser.selectTab(options.tab ?? { url: PAGE_URL, title: 'Fixture page' })
     globals.chrome = {
@@ -174,5 +193,6 @@ export async function closeBrowser(): Promise<void> {
   globals.fetch = realFetch
   delete globals.chrome
   delete globals.indexedDB
+  Reflect.deleteProperty(navigator, 'locks')
   vi.useRealTimers()
 }

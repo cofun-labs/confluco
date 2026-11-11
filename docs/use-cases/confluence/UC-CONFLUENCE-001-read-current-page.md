@@ -21,4 +21,4 @@ The assistant can read the published page open when the question was sent and an
 
 | ID | Priority | Status | Scenario |
 | --- | --- | --- | --- |
-| UC-CONFLUENCE-001-S05 | P0 | 🚧 | Given a signed-in user on a real self-managed Confluence 8.5 page; when they connect the instance and ask the assistant to read the page; then the assistant answers from the published content and provides the source link. |
+| UC-CONFLUENCE-001-S05 | P0 | ✅ | Given a signed-in user on a real self-managed Confluence 8.5 page; when they connect the instance and ask the assistant to read the page; then the assistant answers from the published content and provides the source link. |

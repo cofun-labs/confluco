@@ -9,7 +9,7 @@ Confluco opens an AI side panel on any website. This page describes what it read
 - **Your conversation.** Messages you type and the assistant's replies supply the context for the next question.
 - **Your sign-in session.** Clerk's Sync Host session cookies identify sign-in changes, and Clerk provides a short-lived session token for each Worker request.
 
-Confluco checks the active tab's URL for an HTTPS Atlassian Cloud wiki or a `confluence` label in the hostname or path. A tab on your explicitly connected instance can also contribute page metadata. The extension uses Chrome's existing tab metadata permission for this check. Confluence content is read only on the connected instance and requires Chrome site access granted through the side panel.
+Confluco checks the active tab's URL for an HTTPS Atlassian Cloud wiki or a `confluence` label in the hostname or path. A tab on your explicitly connected instance can also contribute page metadata. The extension uses Chrome's existing tab metadata permission for this check. The side panel requests Chrome site access for the configured scheme, host, and port. Confluco reads content only on the connected instance, within its configured path.
 
 ## Where data goes
 

@@ -53,8 +53,9 @@ export function ConfluenceConnection({ userId, onClose }: { userId: string; onCl
     setBusy(true)
     setError('')
     try {
-      await disconnectInstance(userId, instance)
-      setInstance(undefined)
+      const current = await disconnectInstance(userId, instance)
+      setInstance(current)
+      if (current) setError('The connection changed in another window. Review it before disconnecting.')
     } catch {
       setInstance(await getInstance(userId).catch(() => undefined))
       setError('Could not remove all connection settings. Check site access in Chrome.')

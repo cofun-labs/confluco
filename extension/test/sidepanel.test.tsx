@@ -312,7 +312,7 @@ describe('reading self-managed Confluence', () => {
     browser.ai.script.push({ toolCalls: [read] }, { reply: 'The fixture has a second paragraph.' })
     await ask(user, 'What does this page say?')
     expect(await screen.findByText('The fixture has a second paragraph.')).toBeVisible()
-    expect(browser.requestedOrigins).toEqual(['https://wiki.example.test/*'])
+    expect(browser.requestedOrigins).toEqual(['https://wiki.example.test:8443/*'])
     expect(browser.workspaceRequests).toEqual([
       {
         url: root + '/rest/api/content/42?expand=body.view',
@@ -323,6 +323,33 @@ describe('reading self-managed Confluence', () => {
     expect(result).toContain(marker)
     expect(result).toContain(root + '/pages/viewpage.action?pageId=42')
     expect(result).not.toContain('Ignored script')
+  })
+
+  it.each(['https://*', 'https://*.example.test/kb', 'https://%2a.example.test/kb'])(
+    'rejects a wildcard instance %s without asking Chrome for access',
+    async (base) => {
+      const { browser, user } = await openPanel()
+      await user.click(screen.getByRole('button', { name: 'Connect Confluence' }))
+      await user.type(await screen.findByLabelText('Confluence base URL'), base)
+      await user.click(screen.getByRole('button', { name: /^Connect$/ }))
+      expect(await screen.findByRole('alert')).toHaveTextContent('Enter a self-managed Confluence base URL')
+      expect(browser.requestedOrigins).toEqual([])
+    },
+  )
+
+  it('keeps a new connection when a stale panel tries to disconnect the old one', async () => {
+    const { browser, user } = await openPanel()
+    await connect(user, root)
+    await user.click(screen.getByRole('button', { name: 'Connect Confluence' }))
+    await screen.findByText(`Connected to ${root}`)
+    const next = 'https://next.example.test'
+    browser.setConnectionFromAnotherPanel('user_alice', next, next + ':443/*')
+    await user.click(screen.getByRole('button', { name: 'Disconnect' }))
+    expect(await screen.findByText(`Connected to ${next}`)).toBeVisible()
+    expect(screen.getByRole('alert')).toHaveTextContent('The connection changed in another window.')
+    await user.click(screen.getByRole('button', { name: 'Done' }))
+    await user.click(screen.getByRole('button', { name: 'Connect Confluence' }))
+    expect(await screen.findByText(`Connected to ${next}`)).toBeVisible()
   })
 
   it('[UC-CONFLUENCE-001-S02] honors the configured context path and resolves display URLs from the page', async () => {
