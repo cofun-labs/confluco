@@ -60,6 +60,8 @@ Discussions return bounded comment batches with stable links and parent comment 
 
 Page organization binds both page targets and the copy title to the request. Same-space reparenting checks for cycles and refuses to drop inherited read restrictions. A copy is a new single page using the source body and the destination's inherited access. Copy preflight checks source restrictions and attachment references. Both tools recheck the targets and verify the resulting ancestry and storage.
 
+Attachment listings use the published page's attachment collection and validate each download link against its instance, page and filename. The panel opens the validated link with the browser. Upload uses a local file selected in the panel, a confirmed preview, and the current published page captured at the start of the request. The tool checks for a name collision and rechecks the target and existing version before sending one multipart request. Confluence receives the bytes, and the model receives attachment metadata after read-back.
+
 ## Layout
 
 ```
@@ -86,6 +88,7 @@ extension/                Chrome extension
   src/confluence/page-writes.ts  authorized creation, rename and text edits with read-back
   src/confluence/storage-edit.ts  exact text replacement in original page storage
   src/confluence/comments.ts  paginated discussion reads and verified footer posts
+  src/confluence/attachments.ts  attachment listings, download links and verified uploads
   src/sidepanel/          React UI (main.tsx: sign-in, Chat.tsx: chat, Sessions.tsx: saved sessions,
                           ToolCall.tsx: one tool call and its changes)
   test/                   tests of client code and the whole panel in jsdom

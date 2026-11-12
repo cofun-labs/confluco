@@ -69,7 +69,10 @@ type RestRequest = {
   query: Query
   method: 'GET' | 'POST' | 'PUT' | 'DELETE'
   body?: string
+  file?: { name: string; mediaType: string; base64: string }
 }
+
+export const attachmentSizeLimit = 10 * 1024 * 1024
 
 export class ConfluenceRequestError extends Error {
   readonly stopsQuestion: string
@@ -238,6 +241,40 @@ export function restoreConfluencePage(target: ConfluenceTab, id: string, nextVer
   )
 }
 
+export async function uploadConfluenceAttachment(
+  target: ConfluenceTab,
+  pageId: string,
+  attachmentId: string | undefined,
+  file: File,
+  signal?: AbortSignal,
+) {
+  signal?.throwIfAborted()
+  if (file.size > attachmentSizeLimit) refuse('Choose an attachment of at most 10 MiB.')
+  const base64 = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = () => reject(reader.error)
+    reader.onload = () => {
+      if (typeof reader.result !== 'string' || !reader.result.includes(','))
+        return reject(new Error('Could not read the selected file.'))
+      resolve(reader.result.slice(reader.result.indexOf(',') + 1))
+    }
+    reader.readAsDataURL(file)
+  })
+  const collection = `content/${pageId}/child/attachment`
+  return sendConfluence(
+    target,
+    {
+      area: 'api',
+      resource: attachmentId ? `${collection}/${attachmentId.replace(/^att/, '')}/data` : collection,
+      method: 'POST',
+      query: attachmentId ? {} : { status: 'current' },
+      file: { name: file.name, mediaType: file.type, base64 },
+    },
+    signal,
+    'Confluence rejected the upload. Check the file and attachment rules on the destination page.',
+  )
+}
+
 async function sendConfluence(target: ConfluenceTab, request: RestRequest, signal?: AbortSignal, rejection?: string) {
   signal?.throwIfAborted()
   if (!(await chrome.permissions.contains({ origins: [target.instance.permission] }))) {
@@ -320,7 +357,7 @@ async function requestConfluence(expectedUrl: string, contextPath: string, reque
   const actual = new URL(location.href)
   actual.hash = ''
   if (actual.href !== expectedUrl) return { kind: 'changed' }
-  const { area, query, method, body } = request
+  const { area, query, method, body, file } = request
   let { resource } = request
   let pageId: string | undefined
   if (resource === 'current-page') {
@@ -344,7 +381,20 @@ async function requestConfluence(expectedUrl: string, contextPath: string, reque
     return { kind: 'invalid' }
   const labelResource = /^content\/\d{1,20}\/label$/.test(resource)
   const pageResource = /^content\/\d{1,20}$/.test(resource)
-  if (method === 'POST' && resource !== 'content' && !labelResource) return { kind: 'invalid' }
+  const attachmentCreate = /^content\/\d{1,20}\/child\/attachment$/.test(resource)
+  const attachmentReplace = /^content\/\d{1,20}\/child\/attachment\/\d{1,20}\/data$/.test(resource)
+  if (file) {
+    if (
+      area !== 'api' ||
+      method !== 'POST' ||
+      body !== undefined ||
+      !(
+        (attachmentCreate && query.status === 'current' && Object.keys(query).length === 1) ||
+        (attachmentReplace && Object.keys(query).length === 0)
+      )
+    )
+      return { kind: 'invalid' }
+  } else if (method === 'POST' && resource !== 'content' && !labelResource) return { kind: 'invalid' }
   if (method === 'PUT' && !pageResource) return { kind: 'invalid' }
   if (method === 'DELETE' && !labelResource) {
     // Deleting content in any other status could purge it. Only a current page may enter the trash.
@@ -361,14 +411,24 @@ async function requestConfluence(expectedUrl: string, contextPath: string, reque
   globalThis.conflucoReads.set(requestId, controller)
   const cap = 1_000_000
   try {
+    let payload: BodyInit | undefined = body
+    const headers: Record<string, string> = { Accept: 'application/json' }
+    if (file) {
+      const decoded = atob(file.base64)
+      const bytes = Uint8Array.from(decoded, (character) => character.charCodeAt(0))
+      const form = new FormData()
+      form.append('file', new Blob([bytes], { type: file.mediaType || 'application/octet-stream' }), file.name)
+      payload = form
+      headers['X-Atlassian-Token'] = 'nocheck'
+    } else if (body !== undefined) headers['Content-Type'] = 'application/json'
     const response = await fetch(endpoint.href, {
       method,
       credentials: 'same-origin',
       redirect: 'manual',
       referrerPolicy: 'no-referrer',
-      headers: { Accept: 'application/json', ...(body !== undefined && { 'Content-Type': 'application/json' }) },
-      body,
-      signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)]),
+      headers,
+      body: payload,
+      signal: AbortSignal.any([controller.signal, AbortSignal.timeout(file ? 60_000 : 15_000)]),
     })
     if (
       response.type === 'opaqueredirect' ||
@@ -376,7 +436,7 @@ async function requestConfluence(expectedUrl: string, contextPath: string, reque
       (response.status >= 300 && response.status < 400)
     )
       return { kind: 'auth' }
-    if (response.status === 400) return { kind: 'rejected' }
+    if (response.status === 400 || (file && response.status === 413)) return { kind: 'rejected' }
     if (response.status === 403) return { kind: 'forbidden' }
     if (response.status === 404) return { kind: 'missing' }
     if (response.status === 405 || response.status === 501) return { kind: 'unsupported' }

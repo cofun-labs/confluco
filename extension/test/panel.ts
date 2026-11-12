@@ -101,6 +101,9 @@ export class FakeBrowser {
       AbortSignal,
       AbortController,
       TextDecoder,
+      atob,
+      Blob,
+      FormData,
       fetch: async (url: string, init?: RequestInit) => {
         this.workspaceRequests.push({ url, init })
         return this.confluenceResponse(url, init)

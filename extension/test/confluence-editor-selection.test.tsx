@@ -77,3 +77,17 @@ it.each(['removed', 'tab changed', 'editor reloaded'])(
     expect(browser.workspaceRequests).toEqual([])
   },
 )
+
+it('keeps a reviewed editor selection out of an attachment upload question', async () => {
+  const { browser, user, attach, send } = await openPanel()
+  await attach()
+  const excerpt = await screen.findByRole('region', { name: 'Selected editor text' })
+  await user.upload(screen.getByLabelText('Attachment file'), new File(['Fixture bytes'], 'fixture.txt'))
+  browser.ai.script.push({ reply: 'Upload question received.' })
+  await user.click(screen.getByRole('button', { name: 'Upload attachment' }))
+  await screen.findByText('Upload question received.')
+  expect(JSON.stringify(browser.sentToModel())).not.toContain(selected)
+  expect(excerpt).toHaveTextContent(selected)
+  await send()
+  expect(JSON.stringify(browser.sentToModel())).toContain(selected)
+})

@@ -1,5 +1,6 @@
 import { memo } from 'react'
 import type { ToolStatus } from '../agent'
+import { attachmentDownloads } from '../confluence/attachments'
 
 /** A tool call as the panel shows it. */
 export interface ShownTool {
@@ -61,6 +62,8 @@ export const ToolCall = memo(function ToolCall({
 }) {
   const input = summarize(tool.args)
   const asking = tool.status === 'confirm' && onAnswer
+  const downloads =
+    tool.name === 'list_page_attachments' && tool.status === 'done' ? attachmentDownloads(tool.result) : []
   return (
     <>
       {/* Show the preview while the tool runs or waits for an answer. */}
@@ -101,6 +104,17 @@ export const ToolCall = memo(function ToolCall({
           )}
         </div>
       </details>
+      {downloads.length > 0 && (
+        <ul className="attachment-downloads">
+          {downloads.map(({ name, url }) => (
+            <li key={url}>
+              <a href={url} target="_blank" rel="noreferrer">
+                Download {name}
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
       {asking && tool.question && (
         <div className="tool-confirm" role="group" aria-label={tool.question}>
           <span>{tool.question}</span>
