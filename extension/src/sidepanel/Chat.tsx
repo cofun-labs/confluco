@@ -131,6 +131,7 @@ export function Chat({ userId }: { userId: string }) {
     const target = Promise.all([tab, instance]).then(([currentTab, connected]) => confluenceTab(currentTab, connected))
     const page = Promise.all([tab, target]).then(([currentTab, bound]) => tabPage(currentTab, bound !== undefined))
     questionPage.current = page
+    const session: Current = current ?? { id: crypto.randomUUID(), createdAt: Date.now(), page }
     const question: WorkspaceQuestion = {
       tab: target,
       labelChanges: requestedLabelChanges(text),
@@ -138,13 +139,16 @@ export function Chat({ userId }: { userId: string }) {
       pageEdit: requestedPageEdit(text),
       undoRequested: requestedUndo(text),
       undo: current?.undo,
+      beforeWrite: async () => {
+        const clearing = saving.current.then(async () => {
+          const { id, updatedAt } = session
+          if (updatedAt !== undefined) await store.clearUndo(id, updatedAt)
+        })
+        saving.current = clearing.catch(() => {})
+        await clearing
+      },
     }
     workspaceQuestion.current = question
-    const session: Current = current ?? {
-      id: crypto.randomUUID(),
-      createdAt: Date.now(),
-      page,
-    }
     if (!current) setCurrent(session)
     setInput('')
     setBusy(true)

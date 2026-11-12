@@ -1,6 +1,7 @@
 // Saved sessions, kept on this device in IndexedDB. Relevant messages are sent again when a saved conversation is continued.
 import type { HistoryMessage } from './agent'
 import { confluencePageUrl } from './confluence/tab'
+import { z } from './zod'
 
 /** What the session list shows; the conversation itself is loaded only when a session opens. */
 export interface SessionInfo {
@@ -86,6 +87,22 @@ export class SessionStore {
     await this.run('readwrite', (infos, all) => {
       infos.delete(id)
       all.delete(id)
+      return () => undefined
+    })
+  }
+
+  /** Drop a saved undo record before a new write can outlive the chat that started it. */
+  async clearUndo(id: string, loaded: number): Promise<void> {
+    const revision = z.object({ updatedAt: z.number() })
+    const conversation = z.looseObject({ id: z.literal(id), messages: z.array(z.unknown()), undo: z.unknown() })
+    await this.run('readwrite', (infos, all) => {
+      const info: IDBRequest<unknown> = infos.get(id)
+      const stored: IDBRequest<unknown> = all.get(id)
+      stored.onsuccess = () => {
+        if (revision.safeParse(info.result).data?.updatedAt !== loaded) return
+        const row = conversation.safeParse(stored.result).data
+        if (row?.undo !== undefined) all.put({ ...row, undo: undefined })
+      }
       return () => undefined
     })
   }

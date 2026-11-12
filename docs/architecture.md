@@ -50,7 +50,7 @@ For page creation and rename, the panel takes the exact title, chosen target and
 
 Text edits bind the quoted passage and replacement to the user's current request. The preview resolves a unique text range in the published storage and shows the target and replacement. Before applying the edit, the tool checks the original page and version again. It replaces that range in the original storage and verifies the next version and full body. An uncertain response allows a verification read if the question is still running. The write is attempted once.
 
-The saved conversation keeps a local undo record for its most recent verified text edit. A later workspace change clears the record unless it is another verified text edit. Undo checks the current version and reconstructs the original edit from the earlier storage before restoring that storage as a new version.
+The saved conversation keeps a local undo record for its most recent verified text edit. Before another workspace write starts, the panel clears the saved record so it cannot become stale if the conversation closes during the write. Undo checks the current version and reconstructs the original edit from the earlier storage before restoring that storage as a new version.
 
 ## Layout
 

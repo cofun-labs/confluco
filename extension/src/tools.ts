@@ -34,12 +34,19 @@ export interface WorkspaceQuestion {
   pageEdit?: PageEditRequest
   undoRequested?: boolean
   undo?: PageEditUndo
+  beforeWrite?: () => Promise<void>
 }
 
 const writeOutcome = z.object({ changed: z.boolean() })
 const changesData = (result: unknown) => writeOutcome.safeParse(result).data?.changed !== false
 
-async function applyWorkspaceChange<T>(question: WorkspaceQuestion, run: () => Promise<T>): Promise<T> {
+async function applyWorkspaceChange<T>(
+  question: WorkspaceQuestion,
+  signal: AbortSignal | undefined,
+  run: () => Promise<T>,
+): Promise<T> {
+  if (question.undo) await question.beforeWrite?.()
+  signal?.throwIfAborted()
   try {
     const result = await run()
     if (changesData(result)) question.undo = undefined
@@ -90,7 +97,7 @@ function pageEditTool(currentQuestion: () => WorkspaceQuestion, action: 'edit' |
       prepared = undefined
       const question = currentQuestion()
       if (ready?.question !== question) refuse('Ask again to preview the intended page change.')
-      const result = await applyWorkspaceChange(question, () => applyPageEdit(ready.plan, signal))
+      const result = await applyWorkspaceChange(question, signal, () => applyPageEdit(ready.plan, signal))
       if (ready.edit)
         question.undo = {
           page: result.page.ref,
@@ -138,7 +145,7 @@ function pageWriteTool(currentQuestion: () => WorkspaceQuestion, action: PageWri
         throw new Error(`Only the user can request this page change. Ask them to say ${example} on the intended page.`)
       }
       question.pageWrite = undefined
-      return applyWorkspaceChange(question, () => applyPageWrite(ready.plan, signal))
+      return applyWorkspaceChange(question, signal, () => applyPageWrite(ready.plan, signal))
     },
   })
 }
@@ -217,7 +224,7 @@ export function createTools(currentQuestion: () => WorkspaceQuestion) {
             'Only the user can request a label change. Ask them to say “Add label NAME” or “Remove label NAME” on the intended page.',
           )
         question.labelChanges.shift()
-        return applyWorkspaceChange(question, async () => applyLabel(next, await question.tab, signal))
+        return applyWorkspaceChange(question, signal, async () => applyLabel(next, await question.tab, signal))
       },
     }),
     pageWriteTool(currentQuestion, 'create'),

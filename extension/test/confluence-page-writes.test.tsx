@@ -51,9 +51,9 @@ async function ask(user: UserEvent, message: string) {
 const answered = () => screen.findByRole('button', { name: 'Send' })
 const writes = (browser: FakeBrowser) => browser.workspaceRequests.filter(({ init }) => init?.method !== 'GET')
 
-function pendingResponse() {
-  let release!: (response: Response) => void
-  const promise = new Promise<Response>((resolve) => (release = resolve))
+function pendingResponse<T = Response>() {
+  let release!: (response: T) => void
+  const promise = new Promise<T>((resolve) => (release = resolve))
   return { promise, release }
 }
 
@@ -488,4 +488,35 @@ describe('edit published page text', () => {
       expect(writes(browser)).toHaveLength(newer ? 1 : 0)
     },
   )
+
+  it('clears the saved undo before a later write can outlive the open chat', async () => {
+    const { browser, user } = await openPanel()
+    let edited = false
+    const dispatched = pendingResponse<void>()
+    const response = pendingResponse()
+    const created = { ...child, body: { storage: storage('<p></p>') } }
+    browser.confluenceResponse = (url, init) => {
+      if (init?.method === 'PUT') edited = true
+      if (init?.method === 'POST') {
+        dispatched.release()
+        return response.promise
+      }
+      return Response.json(new URL(url).pathname === contentPath ? { results: [] } : edited ? updated : original)
+    }
+    browser.ai.script.push({ toolCalls: [editCall] }, { reply: 'Edited the page.' })
+    await ask(user, edit)
+    await answered()
+    browser.ai.script.push({ toolCalls: [createCall] })
+    await ask(user, command)
+    await dispatched.promise
+    await user.click(screen.getByRole('button', { name: 'New chat' }))
+    response.release(Response.json(created))
+    await user.click(screen.getByRole('button', { name: 'Sessions' }))
+    await user.click(await screen.findByRole('button', { name: /Replace "Status A & B"/ }))
+    browser.ai.script.push({ toolCalls: [undoCall] })
+    await ask(user, 'Undo the last operation')
+    await answered()
+    expect(screen.getAllByText(/last workspace change.*can be undone/).length).toBeGreaterThan(0)
+    expect(writes(browser)).toHaveLength(2)
+  })
 })
