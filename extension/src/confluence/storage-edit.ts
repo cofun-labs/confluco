@@ -1,6 +1,6 @@
 import { refuse } from './transport'
 
-const escaped: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;' }
+const escaped: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }
 
 // Use offsets into the original storage. Serializing the document would also rewrite unrelated markup.
 function textOffsets(raw: string, text: string, decoder: HTMLTextAreaElement) {
@@ -83,8 +83,8 @@ export function replaceStorageText(storage: string, text: string, replacement: s
   if (stack.length) refuse('This page contains unbalanced storage markup.')
   if (!match)
     refuse('That exact passage was not found in one editable text segment. Quote the current text and try again.')
-  // Confluence keeps quotes literal in stored text. Escape only characters significant to markup.
-  const escapedText = replacement.replace(/[&<>]/g, (character) => escaped[character])
+  // Confluence 8.5 encodes double quotes and leaves apostrophes literal in stored text.
+  const escapedText = replacement.replace(/[&<>"]/g, (character) => escaped[character])
   const joined =
     storage.slice(Math.max(0, match.start - 2), match.start) + escapedText + storage.slice(match.end, match.end + 2)
   if (joined.includes(']]>'))

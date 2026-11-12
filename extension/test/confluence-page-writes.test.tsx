@@ -332,7 +332,7 @@ describe('edit published page text', () => {
     '<td><ac:link><ri:user ri:userkey="synthetic-user" /></ac:link></td></tr></tbody></table>' +
     '<custom:tag attribute="a > b"><![CDATA[Status A & B <raw>]]></custom:tag>'
   const body = '<p>Prefix: Status A &#38; B. Keep &#160; suffix.</p>' + preserved
-  const expected = '<p>Prefix: QA\'s "ready" &lt;today&gt;. Keep &#160; suffix.</p>' + preserved
+  const expected = "<p>Prefix: QA's &quot;ready&quot; &lt;today&gt;. Keep &#160; suffix.</p>" + preserved
   const original = { ...parent, body: { storage: storage(body) } }
   const updated = { ...original, body: { storage: storage(expected) }, version: { number: 3 } }
 
