@@ -59,3 +59,7 @@ Confluco is an independent project and is not endorsed by Atlassian.
 - [Development](docs/development.md) covers builds, checks, Worker configuration and repository settings.
 - [AGENTS.md](AGENTS.md) defines the issue → PR → review → merge workflow and coding rules.
 - [BDD](docs/bdd.md) and [use cases](docs/use-cases) define the behavior contract and its verification.
+
+## License
+
+Copyright 2026 Cofun Labs. The code is licensed under the [Apache License 2.0](LICENSE). The license does not cover the Confluco and Cofun names or their icons.
