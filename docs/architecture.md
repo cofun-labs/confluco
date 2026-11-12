@@ -26,12 +26,12 @@ The agent loop runs in the side panel. The Worker verifies the user and passes t
 
 ## Auth flow
 
-1. The user clicks "Sign in" in the side panel. The extension opens the configured Sync Host’s `/login` page in a new tab; the worker serves this page with Clerk's sign-in UI.
-2. After sign-in, Clerk's session cookie lives on that domain. The extension is configured with `syncHost` and uses the `cookies` permission to read that session. Clerk doesn't refresh an already-open side panel, so the extension watches those cookies and reloads the panel when they change.
+1. The user clicks "Sign in" in the side panel. The extension opens the worker's `/login` page (`https://confluco-api.cofun.cc/login`) in a new tab; the worker serves this page with Clerk's sign-in UI. The Cofun products share one Clerk application on `cofun.cc`, so an account signed in for one product is signed in for the others.
+2. After sign-in, Clerk's client cookie lives on the Frontend API host (`clerk.cofun.cc`) for a production instance, or on the sign-in page's host for a development instance (`extension/src/clerk.ts` picks the host from the publishable key). The extension is configured with that host as `syncHost` and uses the `cookies` permission to read that session. Clerk doesn't refresh an already-open side panel, so the extension watches those cookies and reloads the panel when they change.
 3. Before each request, the extension gets a short-lived session JWT with `getToken()` and sends it as `Authorization: Bearer`.
 4. The worker verifies the JWT locally with Clerk's JWT public key (signature, expiry). If the token has an `azp` (the web origin that requested it), it must be an allowed origin, which stops other websites from using a session they obtained in the browser. Tokens the extension gets through Clerk's Native API carry no `azp`. No network call to Clerk is needed.
 5. The worker counts the request against the user's daily quota (a Durable Object per user, reset at 00:00 UTC) and refuses it once the quota is used up.
-6. The request goes through AI Gateway to Workers AI, tagged with the Clerk user id for per-user analytics. Gateway log collection is off (`collectLog: false`), so the gateway keeps request analytics but not prompts or replies.
+6. The request goes through AI Gateway (`cofun-ai-gateway`, shared by the Cofun products) to Workers AI, tagged with the product (`metadata.app`) and the Clerk user id for per-product and per-user analytics. Gateway log collection is off (`collectLog: false`), so the gateway keeps request analytics but not prompts or replies.
 7. The worker writes one usage record for the request (see [Usage records](development.md#usage-records)).
 
 The manifest's public `key`, when configured, pins the extension ID across local builds. Authentication comes from Clerk's verified session token.
@@ -51,10 +51,12 @@ The version list uses the experimental version endpoint on Confluence 8.5 when a
 ```
 extension/                Chrome extension
   vite.config.ts          build config; writes configured dist or fixture-only dist-smoke
-  manifest.ts             builds manifest.json from .env.local; a test pins its permissions and content security policy
+  .env                    public build config of the hosted Confluco; .env.local overrides it
+  manifest.ts             builds manifest.json from .env; a test pins its permissions and content security policy
   icons/icon.svg          the extension icon; `pnpm icons` exports it into public/icons, which the manifest lists
   sidepanel.html
   src/background.ts       opens the side panel from the toolbar icon
+  src/clerk.ts            what the build and the panel read out of Clerk's publishable key
   src/agent.ts            agent loop (pi) against the worker; the only module that imports pi
   src/tools.ts            tools the agent runs in the extension
   src/tool.ts             defines a tool from one zod schema of its arguments

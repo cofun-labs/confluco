@@ -8,7 +8,7 @@ function manifest(env: Record<string, string>): Plugin {
     name: 'confluco-manifest',
     buildStart() {
       for (const name of ['VITE_CLERK_PUBLISHABLE_KEY', 'VITE_CLERK_SYNC_HOST', 'VITE_API_URL']) {
-        if (!env[name]) throw new Error(`${name} is not set. Put it in .env.local.`)
+        if (!env[name]) throw new Error(`${name} is not set. Put it in .env or .env.local.`)
       }
     },
     generateBundle() {
