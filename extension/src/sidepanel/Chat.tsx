@@ -264,7 +264,9 @@ export function Chat({ userId }: { userId: string }) {
         // The agent can dispatch the write as soon as this callback returns.
         if (u.preview) flushSync(showReadyTool)
         else showReadyTool()
-      } else
+      } else {
+        if (u.name === 'upload_page_attachment' && u.status === 'done' && attachmentUpload && chatId.current === id)
+          setAttachmentFile((file) => (file === attachmentUpload.file ? undefined : file))
         updateReply((m) => {
           const j = newestOpenCall(m.parts, u.id)
           if (j < 0) return m
@@ -273,6 +275,7 @@ export function Chat({ userId }: { userId: string }) {
           parts[j] = { ...part, tool: { ...part.tool, status: u.status, result: u.result } }
           return { ...m, parts }
         })
+      }
     }
 
     const before = agent.history().length

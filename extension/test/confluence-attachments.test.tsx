@@ -111,6 +111,7 @@ it.each([false, true])(
     expect(writes(browser)).toHaveLength(0)
     await user.click(allow)
     expect(await screen.findByText('The file is verified.')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Choose attachment' })).toBeVisible()
     expect(writes(browser)).toHaveLength(1)
     expect(browser.workspaceRequests.at(-1)?.init?.method).toBe('GET')
     const conversation = JSON.stringify(browser.sentToModel())
@@ -176,6 +177,7 @@ it('[UC-CONFLUENCE-012-S03] refuses to replace an attachment that advanced after
 
 it.each([
   [403, /does not have permission/],
+  [413, /rejected the upload/],
   [503, /may have been applied/],
   [200, /may have uploaded the file/],
 ])('[UC-CONFLUENCE-012-S04] stops after one upload when verification fails (%s)', async (status, reason) => {

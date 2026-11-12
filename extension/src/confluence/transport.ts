@@ -359,7 +359,7 @@ async function requestConfluence(expectedUrl: string, contextPath: string, reque
       (response.status >= 300 && response.status < 400)
     )
       return { kind: 'auth' }
-    if (response.status === 400) return { kind: 'rejected' }
+    if (response.status === 400 || (file && response.status === 413)) return { kind: 'rejected' }
     if (response.status === 403) return { kind: 'forbidden' }
     if (response.status === 404) return { kind: 'missing' }
     if (response.status === 405 || response.status === 501) return { kind: 'unsupported' }
