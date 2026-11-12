@@ -21,6 +21,7 @@
 | History and labels | Inspect older page versions and available operations. View labels or ask to add or remove a named label on the current page. |
 | Create and rename pages | Publish a child page with optional plain text or rename a published page on the connected instance. |
 | Edit page text | Preview and apply a replacement for one exact text passage while preserving the surrounding content. |
+| Editor selection | Attach highlighted text from the connected Confluence editor to a question. |
 | Organize pages | Move a published page under a parent in the same space, or copy its body to a new page there. |
 | Page discussions | Read comments with links, add a footer comment, or reply to a specific footer comment. |
 | Attachments | List and download page attachments, or upload a local file to the current published page. |
@@ -47,6 +48,7 @@ Confluence Cloud pages currently provide title and link context.
 11. Ask to read the discussion, `Add comment "Ready for review" on this page`, or `Reply to comment 123 with "I will review it" on this page`. Use the comment ID from the discussion results.
 12. To move or copy a published page, ask `Move this page under URL` or `Copy this page under URL as "New title"`. Use the destination's canonical link in the same space. A move uses Confluence's child placement. Copies contain the body only and have independent history, comments and properties. For top-level moves, cross-space changes, exact sibling order, or copies with attachments, use Confluence's own controls.
 13. Ask to list attachments and use the download links in the tool result. To add a file, open the intended published page, choose a local attachment of at most 10 MiB, and review the upload preview. Select **Replace attachment** to add a new version to an existing attachment with the same name.
+14. In a connected self-managed Confluence editor, highlight text in the page body and select **Attach editor selection**. Review the excerpt, then ask a question. The excerpt may include unpublished text.
 
 ## How it works
 

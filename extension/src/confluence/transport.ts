@@ -88,6 +88,83 @@ export function requireTab(tab: ConfluenceTab | undefined): ConfluenceTab {
   return tab
 }
 
+const selectionLimit = 4000
+const editorSelectionResult = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('selection'), text: z.string().min(1).max(selectionLimit), truncated: z.boolean() }),
+  z.object({ kind: z.enum(['changed', 'not-editor', 'empty']) }),
+])
+
+export async function readEditorSelection(target: ConfluenceTab | undefined) {
+  const tab = requireTab(target)
+  if (!(await chrome.permissions.contains({ origins: [tab.instance.permission] })))
+    refuse('Confluco needs Chrome site access. Reconnect this Confluence instance and try again.')
+  const [frame] = await chrome.scripting
+    .executeScript({
+      target: { tabId: tab.tabId },
+      world: 'ISOLATED',
+      func: readSelection,
+      args: [tab.url, tab.instance.path, selectionLimit],
+    })
+    .catch(() => refuse('Could not access the editor. Open the intended Confluence tab and try again.'))
+  const parsed = editorSelectionResult.safeParse(frame?.result)
+  if (!parsed.success) refuse('Confluence did not return the expected editor selection.')
+  switch (parsed.data.kind) {
+    case 'selection':
+      if (!frame?.documentId) refuse('Confluco could not identify the editor document.')
+      return { tab, documentId: frame.documentId, text: parsed.data.text, truncated: parsed.data.truncated }
+    case 'changed':
+      refuse('The active tab changed. Select text in the intended editor and try again.')
+    case 'not-editor':
+      refuse('Open a supported Confluence editor and select text in the page body.')
+    case 'empty':
+      refuse('Select text in the Confluence editor before attaching it.')
+  }
+}
+
+export async function isEditorSelectionCurrent(tab: ConfluenceTab, documentId: string): Promise<boolean> {
+  try {
+    if (!(await chrome.permissions.contains({ origins: [tab.instance.permission] }))) return false
+    const [frame] = await chrome.scripting.executeScript({
+      target: { tabId: tab.tabId },
+      world: 'ISOLATED',
+      func: (expectedUrl: string) => {
+        const current = new URL(location.href)
+        current.hash = ''
+        return current.href === expectedUrl
+      },
+      args: [tab.url],
+    })
+    return frame?.documentId === documentId && frame.result === true
+  } catch {
+    return false
+  }
+}
+
+/** Runs in the isolated world of the captured top-level tab. */
+function readSelection(expectedUrl: string, contextPath: string, limit: number) {
+  const current = new URL(location.href)
+  current.hash = ''
+  if (current.href !== expectedUrl) return { kind: 'changed' }
+  const path = current.pathname.slice(contextPath.length).replace(/;[^/]*|%3bjsessionid(?:=|%3d)[^/]*/gi, '')
+  if (!/^\/pages\/(?:editpage|resumedraft|createpage)\.action$/.test(path)) return { kind: 'not-editor' }
+
+  const frame = document.querySelector<HTMLIFrameElement>('iframe#wysiwygTextarea_ifr')
+  const editor = frame?.contentDocument?.body
+  if (!editor || editor.getAttribute('contenteditable') !== 'true') return { kind: 'not-editor' }
+  const selection = editor.ownerDocument.getSelection()
+  if (
+    !selection?.anchorNode ||
+    !selection.focusNode ||
+    selection.isCollapsed ||
+    !editor.contains(selection.anchorNode) ||
+    !editor.contains(selection.focusNode)
+  )
+    return { kind: 'empty' }
+  const text = selection.toString().trim()
+  if (!text) return { kind: 'empty' }
+  return { kind: 'selection', text: text.slice(0, limit), truncated: text.length > limit }
+}
+
 export function restUrl(instance: Instance, resource: string, query: Query, area: RestArea): URL {
   const endpoint = new URL(`${instance.origin}${instance.path}/rest/${area}/${resource}`)
   endpoint.search = new URLSearchParams(query).toString()
