@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
 
-// What the build reads from .env.local. Nothing is sent to these hosts: the tests answer every request.
+// What the build reads from .env. Nothing is sent to these hosts: the tests answer every request.
 const env = {
   VITE_API_URL: 'https://api.copilot.test/v1/',
   VITE_CLERK_PUBLISHABLE_KEY: 'pk_test_fake',

@@ -4,6 +4,8 @@
 // change unnoticed. It also pins the content security policy, which names the hosts
 // the extension's pages may contact (see PRIVACY.md).
 
+import { clerkFrontendApi } from './src/clerk.ts'
+
 /** The env values the manifest is built from (see .env). */
 export interface ManifestEnv {
   VITE_CLERK_PUBLISHABLE_KEY?: string
@@ -20,16 +22,9 @@ const ICONS = { 16: 'icons/icon-16.png', 32: 'icons/icon-32.png', 48: 'icons/ico
 /** Clerk serves user avatars and provider icons from here, for every instance. */
 const CLERK_IMAGE_HOST = 'img.clerk.com'
 
-/** Clerk's Frontend API host is encoded in the publishable key: pk_test_<base64("host$")>. */
-function clerkFrontendApi(publishableKey: string): string | undefined {
-  const encoded = publishableKey.split('_')[2]
-  if (!encoded) return undefined
-  return Buffer.from(encoded, 'base64').toString('utf8').replace(/\$$/, '')
-}
-
 /**
  * Host permission covering the domain Clerk sets __client_uat on: the sign-in
- * page's registrable domain (e.g. confluco.example.com -> *.example.com).
+ * page's registrable domain (e.g. confluco-api.cofun.cc -> *.cofun.cc).
  * The last two labels are a guess that fits hosts like example.com; set
  * CLERK_COOKIE_DOMAIN for suffixes such as example.co.uk. IPs and single-label
  * hosts (localhost) get a permission for the host itself.
@@ -89,11 +84,13 @@ export function buildManifest(env: ManifestEnv, version: string) {
     optional_host_permissions: ['http://*/*', 'https://*/*'],
     host_permissions: [
       ...new Set([
+        // Clerk's Frontend API. On a production instance the cookies permission also reads Clerk's
+        // client cookie from this host (Sync Host).
         ...(clerkHost ? [`https://${clerkHost}/*`] : []),
-        // Sign-in page; the cookies permission reads its Clerk session (Sync Host).
+        // Sign-in page. On a development instance Clerk's client cookie is on this host instead.
         hostPermission(env.VITE_CLERK_SYNC_HOST),
         ...(env.VITE_API_URL ? [hostPermission(env.VITE_API_URL)] : []),
-        // Clerk sets __client_uat on the parent domain (e.g. .kitfun.cc). The side
+        // Clerk sets __client_uat on the parent domain (e.g. .cofun.cc). The side
         // panel watches it to notice sign-in and sign-out, and Chrome only reports
         // cookies whose domain the extension has host permission for.
         clerkCookiePermission(env.VITE_CLERK_SYNC_HOST, env.CLERK_COOKIE_DOMAIN),

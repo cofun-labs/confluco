@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { parseEnv } from 'node:util'
 import { describe, expect, it } from 'vitest'
 import { buildManifest, type ManifestEnv } from '../manifest'
 
@@ -26,6 +27,30 @@ describe('extension manifest', () => {
     expect(json.content_security_policy.extension_pages).toBe(
       "default-src 'self'; script-src 'self'; object-src 'self'; style-src 'self' 'unsafe-inline'; " +
         `connect-src 'self' https://inference.example.net https://${clerkHost}; ` +
+        "img-src 'self' data: blob: https://img.clerk.com",
+    )
+  })
+
+  // The checked-in build config, read from the file itself so a local .env.local can't change it.
+  // PRIVACY.md lists these hosts; a change here changes that table too.
+  it('allows only the hosts of the hosted Confluco in the checked-in config', () => {
+    const env = parseEnv(readFileSync(new URL('../.env', import.meta.url), 'utf8'))
+    const json = buildManifest(
+      {
+        VITE_CLERK_PUBLISHABLE_KEY: env.VITE_CLERK_PUBLISHABLE_KEY,
+        VITE_CLERK_SYNC_HOST: env.VITE_CLERK_SYNC_HOST ?? '',
+        VITE_API_URL: env.VITE_API_URL,
+      },
+      '1.2.3',
+    )
+    expect(json.host_permissions).toEqual([
+      'https://clerk.cofun.cc/*',
+      'https://confluco-api.cofun.cc/*',
+      'https://*.cofun.cc/*',
+    ])
+    expect(json.content_security_policy.extension_pages).toBe(
+      "default-src 'self'; script-src 'self'; object-src 'self'; style-src 'self' 'unsafe-inline'; " +
+        "connect-src 'self' https://confluco-api.cofun.cc https://clerk.cofun.cc; " +
         "img-src 'self' data: blob: https://img.clerk.com",
     )
   })

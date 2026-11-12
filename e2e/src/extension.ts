@@ -60,7 +60,7 @@ export function replaceProblem(loaded: string, built: string): string | undefine
   if (key(built) === key(loaded)) return undefined
   return (
     "The build's manifest key differs from the loaded extension's, so reloading would change the " +
-    "extension id. Check CRX_PUBLIC_KEY in this checkout's extension/.env.local and .env.local."
+    "extension id. Check CRX_PUBLIC_KEY in this checkout's extension/.env and .env.local."
   )
 }
 
@@ -139,7 +139,7 @@ export function reloadExtension(page: Target): Promise<string | undefined> {
 }
 
 /**
- * Builds this checkout's extension, with this checkout's extension/.env.local, and puts it in `outDir`. It
+ * Builds this checkout's extension, with this checkout's extension/.env and .env.local, and puts it in `outDir`. It
  * is built next to `outDir` first and replaces it only if it would load as the same extension.
  */
 export async function build(repoRoot: string, outDir: string): Promise<void> {

@@ -16,7 +16,7 @@ See [AGENTS.md](../AGENTS.md) for the issue → PR → review → merge workflow
 
 ## GitHub settings
 
-Enable **Dependency graph** in [Advanced Security](https://github.com/kitfun/confluco/settings/security_analysis) before running Dependency Review or enabling Dependabot alerts. GitHub may need time to index the repository's dependencies after it is enabled.
+Enable **Dependency graph** in [Advanced Security](https://github.com/cofun-labs/confluco/settings/security_analysis) before running Dependency Review or enabling Dependabot alerts. GitHub may need time to index the repository's dependencies after it is enabled.
 
 The `main` branch ruleset is kept in [`.github/rulesets/main.json`](../.github/rulesets/main.json): no deletion or force push, linear history, changes only through PRs with CI, dependency review, and actionlint passing and every review thread resolved, no open CodeQL or zizmor code scanning alerts of medium severity or above, merged by a merge queue that runs the required checks again on top of the latest `main` before it squash-merges (code scanning runs on the PR and on `main`, not in the queue). Every action is pinned to a full commit SHA. [`scripts/sync-github-settings.sh`](../scripts/sync-github-settings.sh) applies it along with the repository options: squash merge only (the PR title and body become the commit message), delete head branches on merge, auto-merge allowed (on a branch with a merge queue, `gh pr merge` adds a PR to the queue through it), secret scanning with push protection, and Dependabot alerts and security updates. Weekly Dependabot version updates use a seven-day cooldown configured in [`.github/dependabot.yml`](../.github/dependabot.yml).
 
@@ -34,7 +34,7 @@ If you change a setting in the GitHub dashboard, copy it back into these files.
 
 ## Worker
 
-The extension currently uses an existing Worker selected by local configuration. To deploy the bundled Worker independently:
+Merging to `main` deploys the Worker through Cloudflare Workers Builds once that integration is connected (see [Workers Builds settings](#workers-builds-settings)). To deploy by hand:
 
 ```bash
 cd worker
@@ -43,13 +43,15 @@ pnpm exec wrangler login
 CLOUDFLARE_ACCOUNT_ID='your-account-id' pnpm run deploy
 ```
 
-Wrangler names the bundled Worker `confluco` and declares its AI, quota and usage bindings. Add a custom-domain route if your deployment needs one. Configure Clerk through your deployment environment or Wrangler secrets; `worker/.dev.vars.example` lists the values for local development.
+The Worker is named `confluco-api` and runs on the custom domain `confluco-api.cofun.cc` (see `routes` in `wrangler.jsonc`). The domain's zone must belong to the deploying Cloudflare account. It needs no secrets: every value it uses is public and set in `wrangler.jsonc`.
 
-Worker configuration values:
+Sign-in is shared with the other Cofun products: one Clerk application on `cofun.cc` (Frontend API `clerk.cofun.cc`). Each product has its own Worker, quota and usage dataset. The AI Gateway `cofun-ai-gateway` is shared too, so its rate limit and spend limit apply to the products together; requests carry `metadata.app` to tell them apart.
+
+Variables in `wrangler.jsonc`:
 
 | Variable | Description |
 |---|---|
-| `CLERK_PUBLISHABLE_KEY` | Clerk publishable key, used by the sign-in page |
+| `CLERK_PUBLISHABLE_KEY` | Clerk publishable key, used by the sign-in page. The hosted Worker uses the production instance (`pk_live_…`, Frontend API `clerk.cofun.cc`) |
 | `AI_GATEWAY_ID` | AI Gateway id; leave empty to call Workers AI directly |
 | `MODEL` | The only model clients can use |
 | `DAILY_REQUEST_LIMIT` | Chat requests each user may make per UTC day; counted in the `UserQuota` Durable Object (one per user) |
@@ -60,7 +62,7 @@ For local development, copy `worker/.dev.vars.example` to `worker/.dev.vars` and
 
 ### Usage records
 
-Every chat request that passes auth leaves one data point in the `confluco_usage` Analytics Engine dataset (binding `USAGE`), written when the reply ends, is refused, or fails. Records hold sizes, token counts, and the outcome, never message or reply text. Analytics Engine deletes them after 90 days.
+Every chat request that passes auth leaves one data point in the `confluco_api_usage` Analytics Engine dataset (binding `USAGE`), written when the reply ends, is refused, or fails. Records hold sizes, token counts, and the outcome, never message or reply text. Analytics Engine deletes them after 90 days.
 
 | Column | Value |
 |---|---|
@@ -79,7 +81,7 @@ SELECT index1 AS user, toStartOfDay(timestamp) AS day,
        sum(_sample_interval * double3) AS prompt_tokens,
        sum(_sample_interval * double4) AS completion_tokens,
        sumIf(_sample_interval, blob2 != 'ok' AND blob2 != 'cancelled') AS failed
-FROM confluco_usage
+FROM confluco_api_usage
 WHERE timestamp > NOW() - INTERVAL '7' DAY
 GROUP BY user, day
 ORDER BY day DESC, requests DESC
@@ -87,7 +89,7 @@ ORDER BY day DESC, requests DESC
 
 ### Workers Builds settings
 
-For a dedicated deployment, connect `kitfun/confluco` under Workers & Pages → `confluco` → Settings → Builds. A merge deploys only after this integration is configured.
+In the Cloudflare dashboard: Workers & Pages → `confluco-api` → Settings → Builds → connect `cofun-labs/confluco`. The Cloudflare Workers and Pages GitHub App must be installed on the `cofun-labs` organization with access to this repository. A merge deploys only after this integration is connected.
 
 | Setting | Value |
 |---|---|
@@ -98,12 +100,12 @@ For a dedicated deployment, connect `kitfun/confluco` under Workers & Pages → 
 
 ## Extension
 
-Copy `extension/.env.example` to `extension/.env.local` and configure your Worker and Clerk instance. The checked-in `extension/.env.smoke` uses synthetic hosts exclusively for tests. `pnpm check` builds that configuration into `extension/dist-smoke`, while `pnpm build` writes your configured build to `extension/dist`.
+`extension/.env` holds the public build config of the hosted Confluco. To point at your own deployment, override values in `extension/.env.local`. The checked-in `extension/.env.smoke` uses synthetic hosts exclusively for tests. `pnpm check` builds that configuration into `extension/dist-smoke`, while `pnpm build` writes your configured build to `extension/dist`.
 
 | Variable | Description |
 |---|---|
-| `VITE_CLERK_PUBLISHABLE_KEY` | Clerk publishable key |
-| `VITE_CLERK_SYNC_HOST` | URL of the sign-in page (the worker's domain) |
+| `VITE_CLERK_PUBLISHABLE_KEY` | Clerk publishable key, of the same instance as the Worker's. It names the Frontend API host, which the manifest allows |
+| `VITE_CLERK_SYNC_HOST` | URL of the sign-in page (the Worker's domain). With a development instance's key (`pk_test_…`) Clerk syncs the session from this host; with a production instance's key (`pk_live_…`) it syncs from the Frontend API host instead |
 | `VITE_API_URL` | Worker base URL, including `/v1` |
 | `CRX_PUBLIC_KEY` | Extension signing public key; pins the extension ID |
 | `CLERK_COOKIE_DOMAIN` | Optional. The registrable domain Clerk sets its cookies on, e.g. `example.co.uk`. Defaults to the last two labels of the sign-in page's host |
@@ -118,7 +120,14 @@ openssl base64 -A -in extension/keys/pub.der                          # CRX_PUBL
 shasum -a 256 extension/keys/pub.der | cut -c1-32 | tr '0-9a-f' 'a-p'  # extension ID
 ```
 
-In the Clerk dashboard, enable the Native API (Native applications page) so the Chrome extension can sign in.
+In the Clerk dashboard, enable the Native API (Native applications page) so the Chrome extension can sign in. Development and production instances have separate settings, keys, and users: do it on the instance whose keys you use.
+
+A production instance also needs:
+
+- Its DNS records in place, so the Frontend API answers at `clerk.<your domain>`. The sign-in page must be on the same registrable domain, because that is where Clerk sets its cookies.
+- Your own OAuth credentials for each social sign-in (Clerk's shared ones work only on development instances).
+- The extension's origin (`chrome-extension://<extension id>`) in the instance's `allowed_origins`, set through Clerk's Backend API as [Clerk's Sync Host guide](https://clerk.com/docs/guides/sessions/sync-host#add-the-extensions-id-to-your-web-apps-allowedorigins) describes.
+- `CLERK_JWT_KEY` taken from that instance: the PEM form of the key at `https://clerk.<your domain>/.well-known/jwks.json`.
 
 ```bash
 pnpm build        # outputs extension/dist
@@ -126,11 +135,9 @@ pnpm build        # outputs extension/dist
 
 In `chrome://extensions`, turn on Developer mode, click "Load unpacked", and pick `extension/dist`.
 
-### Reuse an existing Worker
+### Use another deployment
 
-Set `VITE_API_URL` to its API base including `/v1`, `VITE_CLERK_SYNC_HOST` to its sign-in origin, and `VITE_CLERK_PUBLISHABLE_KEY` to the same Clerk instance. Confluco uses its own `CRX_PUBLIC_KEY` and extension ID. Google sign-in, session sync and a real chat request were verified against the current development instance on November 11, 2026 without adding a new origin entry.
-
-For another instance, test sign-in and session sync first. If Clerk rejects the origin, follow the [Sync Host allowed origins setup](https://clerk.com/docs/guides/sessions/sync-host#add-the-extensions-id-to-your-web-apps-allowedorigins). If the token carries an `azp` for the extension origin, include it in the Worker's `CLERK_AUTHORIZED_PARTIES`. Shared deployments use the same Clerk accounts, model, per-user quota and server-side usage records.
+Set `VITE_API_URL` to its API base including `/v1`, `VITE_CLERK_SYNC_HOST` to its sign-in origin, and `VITE_CLERK_PUBLISHABLE_KEY` to the same Clerk instance, in `extension/.env.local`. Include the extension's origin in that Worker's `CLERK_AUTHORIZED_PARTIES`.
 
 ## Real-browser scenarios
 

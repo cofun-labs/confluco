@@ -1,12 +1,13 @@
 import { ClerkProvider, Show, useAuth, UserButton } from '@clerk/chrome-extension'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { clerkSyncHost } from '../clerk'
 import { Chat } from './Chat'
 import './style.css'
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string
-// Web page where users sign in. Its Clerk session is synced into the extension.
-const SYNC_HOST = new URL(import.meta.env.VITE_CLERK_SYNC_HOST).origin
+// Web page where users sign in. The Clerk session it starts is synced into the extension.
+const SIGN_IN_HOST = new URL(import.meta.env.VITE_CLERK_SYNC_HOST).origin
 const PANEL_URL = chrome.runtime.getURL('sidepanel.html')
 
 // Clerk doesn't fully sync auth state into an open side panel, so reload the
@@ -31,7 +32,7 @@ async function uatCookieName(): Promise<string> {
 // Reading by URL can return both a host-only and a parent-domain cookie with this name, in no
 // fixed order. A stale "0" left on one of them must not hide a live session on the other.
 async function readSignedIn(name: string): Promise<boolean> {
-  const cookies = await chrome.cookies.getAll({ url: SYNC_HOST, name })
+  const cookies = await chrome.cookies.getAll({ url: SIGN_IN_HOST, name })
   return cookies.some((cookie) => cookie.value !== '' && cookie.value !== '0')
 }
 
@@ -52,7 +53,7 @@ uatCookieName()
   .catch(console.error)
 
 function openSignIn() {
-  chrome.tabs.create({ url: `${SYNC_HOST}/login` })
+  chrome.tabs.create({ url: `${SIGN_IN_HOST}/login` })
 }
 
 // Each account gets its own chat and sessions; keyed so a change of account starts over.
@@ -65,7 +66,7 @@ function App() {
   return (
     <ClerkProvider
       publishableKey={PUBLISHABLE_KEY}
-      syncHost={SYNC_HOST}
+      syncHost={clerkSyncHost(PUBLISHABLE_KEY, SIGN_IN_HOST)}
       // Clerk's SDK reports its own usage to clerk-telemetry.com on development instances. The
       // extension contacts only the hosts PRIVACY.md lists, so it is off.
       telemetry={false}
