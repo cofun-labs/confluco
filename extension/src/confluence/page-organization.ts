@@ -1,4 +1,5 @@
 import { z } from '../zod'
+import { hasRestriction, restrictions } from './history'
 import {
   findTitleInSpace,
   readWrittenPage,
@@ -11,7 +12,7 @@ import {
 } from './page-writes'
 import { fetchPublishedPage, pageLink, publishedPage } from './references'
 import {
-  createConfluencePage,
+  createConfluenceContent,
   getConfluence,
   refuse,
   requireTab,
@@ -47,20 +48,6 @@ export function requestedOrganization(message: string): OrganizationRequest | un
   return undefined
 }
 
-const subjects = z.object({
-  results: z.array(z.unknown()),
-  size: z.int().min(0).optional(),
-  _links: z.object({ next: z.string().optional() }).optional(),
-})
-const operation = z.object({ restrictions: z.object({ user: subjects, group: subjects }) })
-const restrictions = z.object({ read: operation, update: operation })
-
-function restricted({ restrictions }: z.output<typeof operation>): boolean {
-  return [restrictions.user, restrictions.group].some(({ results, size, _links }) =>
-    Boolean(results.length || size || _links?.next),
-  )
-}
-
 function lineage(parent: Parent) {
   return [...parent.ancestors, { id: parent.id }]
 }
@@ -80,7 +67,7 @@ async function requireCompatibleAccess(
     const parsed = restrictions.safeParse(response.data)
     if (!parsed.success)
       refuse('Confluence did not report restrictions on the source or an ancestor. Check access before trying again.')
-    if (restricted(parsed.data.read) || (id === source.id && restricted(parsed.data.update)))
+    if (hasRestriction(parsed.data.read) || (id === source.id && hasRestriction(parsed.data.update)))
       refuse('This destination could drop an existing page restriction. Choose a destination with the same access.')
   }
 }
@@ -141,7 +128,7 @@ export async function applyOrganization(plan: Awaited<ReturnType<typeof prepareO
     await requireBodyOnlyCopy(tab, current, signal)
     const existing = await findTitleInSpace(tab, request.title, destination.space.key, signal)
     if (existing) refuse('A page with that title already exists in the destination space. Choose a different title.')
-    const response = await createConfluencePage(
+    const response = await createConfluenceContent(
       tab,
       { type: 'page', title: request.title, space: destination.space, ancestors, body: source.body },
       signal,

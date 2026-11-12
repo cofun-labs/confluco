@@ -1,3 +1,10 @@
+import {
+  applyComment,
+  commentsArgs,
+  listPageComments,
+  prepareComment,
+  type CommentRequest,
+} from './confluence/comments'
 import { accessArgs, listVersions, pageAccess, readPageVersion, versionArgs, versionsArgs } from './confluence/history'
 import { applyLabel, changeLabelArgs, labelsArgs, listLabels, type LabelRequest } from './confluence/labels'
 import {
@@ -15,14 +22,15 @@ import {
   applyPageEdit,
   applyPageWrite,
   describePageWrite,
+  pageEditUndo,
   pageTitleArgs,
   preparePageEdit,
   preparePageWrite,
   prepareUndoPageEdit,
   type PageEditRequest,
-  type PageEditUndo,
   type PageWriteRequest,
 } from './confluence/page-writes'
+import { applyPageStatus, pageTrashUndo, preparePageStatus, type PageStatusRequest } from './confluence/page-status'
 import { readPage } from './confluence/read-page'
 import { refuse, type ConfluenceTab } from './confluence/transport'
 import { defineTool } from './tool'
@@ -34,10 +42,15 @@ export interface WorkspaceQuestion {
   pageWrite?: PageWriteRequest
   pageEdit?: PageEditRequest
   organization?: OrganizationRequest
+  comment?: CommentRequest
+  pageStatus?: PageStatusRequest
   undoRequested?: boolean
-  undo?: PageEditUndo
+  undo?: WorkspaceUndo
   beforeWrite?: () => Promise<void>
 }
+
+export const workspaceUndo = z.union([pageEditUndo, pageTrashUndo])
+export type WorkspaceUndo = z.output<typeof workspaceUndo>
 
 const writeOutcome = z.object({ changed: z.boolean() })
 const changesData = (result: unknown) => writeOutcome.safeParse(result).data?.changed !== false
@@ -59,35 +72,23 @@ async function applyWorkspaceChange<T>(
   }
 }
 
-function pageEditTool(currentQuestion: () => WorkspaceQuestion, action: 'edit' | 'undo') {
+function pageEditTool(currentQuestion: () => WorkspaceQuestion) {
   let prepared:
-    | { question: WorkspaceQuestion; plan: Awaited<ReturnType<typeof preparePageEdit>>; edit?: PageEditRequest }
+    | { question: WorkspaceQuestion; plan: Awaited<ReturnType<typeof preparePageEdit>>; edit: PageEditRequest }
     | undefined
   return defineTool({
-    name: action === 'edit' ? 'edit_page' : 'undo_page_edit',
+    name: 'edit_page',
     description:
-      action === 'edit'
-        ? 'Apply and verify a targeted text replacement on a published page. Use only for a direct request like Replace "OLD" with "NEW" on this page. The page and exact text come from the user message.'
-        : 'Undo the last verified page text edit in this conversation. Use only for an explicit request to undo the last operation. The target and prior text come from the saved edit.',
+      'Apply and verify a targeted text replacement on a published page. Use only for a direct request like Replace "OLD" with "NEW" on this page. The page and exact text come from the user message.',
     args: z.strictObject({}),
     changesData: true,
     preview: async (_args, signal) => {
       prepared = undefined
       const question = currentQuestion()
-      let plan: Awaited<ReturnType<typeof preparePageEdit>>
-      let edit: PageEditRequest | undefined
-      if (action === 'edit') {
-        edit = question.pageEdit
-        if (!edit) refuse('Ask the user to say Replace "OLD" with "NEW" on this page.')
-        question.pageEdit = undefined
-        plan = await preparePageEdit(edit, await question.tab, signal)
-      } else {
-        if (!question.undoRequested) refuse('Ask the user to explicitly request undoing the last operation.')
-        question.undoRequested = false
-        if (!question.undo)
-          refuse('The last workspace change in this conversation is not a verified text edit that can be undone.')
-        plan = await prepareUndoPageEdit(question.undo, await question.tab, signal)
-      }
+      const edit = question.pageEdit
+      if (!edit) refuse('Ask the user to say Replace "OLD" with "NEW" on this page.')
+      question.pageEdit = undefined
+      const plan = await preparePageEdit(edit, await question.tab, signal)
       signal?.throwIfAborted()
       if (currentQuestion() !== question) return undefined
       prepared = { question, plan, edit }
@@ -100,14 +101,95 @@ function pageEditTool(currentQuestion: () => WorkspaceQuestion, action: 'edit' |
       const question = currentQuestion()
       if (ready?.question !== question) refuse('Ask again to preview the intended page change.')
       const result = await applyWorkspaceChange(question, signal, () => applyPageEdit(ready.plan, signal))
-      if (ready.edit)
-        question.undo = {
-          page: result.page.ref,
-          version: result.version,
-          before: ready.edit.before,
-          after: ready.edit.after,
-        }
+      question.undo = {
+        page: result.page.ref,
+        version: result.version,
+        before: ready.edit.before,
+        after: ready.edit.after,
+      }
       return result
+    },
+  })
+}
+
+function commentTool(currentQuestion: () => WorkspaceQuestion) {
+  let prepared: { question: WorkspaceQuestion; plan: Awaited<ReturnType<typeof prepareComment>> } | undefined
+  return defineTool({
+    name: 'add_page_comment',
+    description:
+      'Add a footer comment or reply from a direct user request. The page, optional parent comment ID, and exact quoted text come from the user message.',
+    args: z.strictObject({}),
+    changesData: true,
+    preview: async (_args, signal) => {
+      prepared = undefined
+      const question = currentQuestion()
+      const request = question.comment
+      if (!request)
+        refuse('Ask the user to say Add comment "TEXT" on this page or Reply to comment ID with "TEXT" on this page.')
+      question.comment = undefined
+      const plan = await prepareComment(request, await question.tab, signal)
+      signal?.throwIfAborted()
+      if (currentQuestion() !== question) return undefined
+      prepared = { question, plan }
+      return plan.preview
+    },
+    run: async (_args, signal) => {
+      signal?.throwIfAborted()
+      const question = currentQuestion()
+      const ready = prepared
+      prepared = undefined
+      if (ready?.question !== question) refuse('Ask again to preview the intended comment.')
+      return applyWorkspaceChange(question, signal, () => applyComment(ready.plan, signal))
+    },
+  })
+}
+
+function undoWorkspaceTool(currentQuestion: () => WorkspaceQuestion) {
+  let prepared:
+    | { question: WorkspaceQuestion; reviewAccess: boolean; run: (signal?: AbortSignal) => Promise<unknown> }
+    | undefined
+  return defineTool({
+    name: 'undo_last_change',
+    description:
+      'Undo the latest verified text edit or trash action in this conversation. Use only for an explicit request to undo the last operation. The saved change determines the target and reversal.',
+    args: z.strictObject({}),
+    changesData: true,
+    needsConfirmation: () => prepared?.reviewAccess === true,
+    preview: async (_args, signal) => {
+      prepared = undefined
+      const question = currentQuestion()
+      if (!question.undoRequested) refuse('Ask the user to explicitly request undoing the last operation.')
+      const undo = question.undo
+      if (!undo) refuse('The last workspace change in this conversation has no verified operation that can be undone.')
+      question.undoRequested = false
+      const tab = await question.tab
+      const reversal =
+        'kind' in undo
+          ? await preparePageStatus({ action: 'restore' }, tab, signal, undo).then((plan) => ({
+              preview: plan.preview,
+              reviewAccess: plan.reviewAccess,
+              run: async (signal?: AbortSignal) => {
+                const { trashDate: _, ...result } = await applyPageStatus(plan, signal)
+                return result
+              },
+            }))
+          : await prepareUndoPageEdit(undo, tab, signal).then((plan) => ({
+              preview: plan.preview,
+              reviewAccess: false,
+              run: (signal?: AbortSignal) => applyPageEdit(plan, signal),
+            }))
+      signal?.throwIfAborted()
+      if (currentQuestion() !== question) return undefined
+      prepared = { question, reviewAccess: reversal.reviewAccess, run: reversal.run }
+      return reversal.preview
+    },
+    run: async (_args, signal) => {
+      signal?.throwIfAborted()
+      const ready = prepared
+      prepared = undefined
+      const question = currentQuestion()
+      if (ready?.question !== question) refuse('Ask again to preview the intended undo.')
+      return applyWorkspaceChange(question, signal, () => ready.run(signal))
     },
   })
 }
@@ -148,6 +230,46 @@ function pageWriteTool(currentQuestion: () => WorkspaceQuestion, action: PageWri
       }
       question.pageWrite = undefined
       return applyWorkspaceChange(question, signal, () => applyPageWrite(ready.plan, signal))
+    },
+  })
+}
+
+function pageStatusTool(currentQuestion: () => WorkspaceQuestion, action: PageStatusRequest['action']) {
+  let prepared: { question: WorkspaceQuestion; plan: Awaited<ReturnType<typeof preparePageStatus>> } | undefined
+  return defineTool({
+    name: action === 'trash' ? 'trash_page' : 'restore_page',
+    description:
+      action === 'trash'
+        ? 'Move an explicitly requested published page to recoverable trash. Use only for a direct request such as Trash this page.'
+        : 'Restore a trashed page specified by the user by link. Confluence restores it at the space root.',
+    needsConfirmation: () => prepared?.plan.page.status !== (action === 'trash' ? 'trashed' : 'current'),
+    args: z.strictObject({}),
+    changesData,
+    preview: async (_args, signal) => {
+      prepared = undefined
+      const question = currentQuestion()
+      const direct = question.pageStatus
+      if (direct?.action !== action)
+        refuse('Ask the user to specify the page to trash or provide the link of the page to restore.')
+      question.pageStatus = undefined
+      const plan = await preparePageStatus(direct, await question.tab, signal)
+      signal?.throwIfAborted()
+      if (currentQuestion() !== question) return undefined
+      prepared = { question, plan }
+      return plan.preview
+    },
+    run: async (_args, signal) => {
+      signal?.throwIfAborted()
+      const question = currentQuestion()
+      const ready = prepared
+      prepared = undefined
+      if (ready?.question !== question) refuse('Ask again to preview the intended page.')
+      const { trashDate, ...result } = await applyWorkspaceChange(question, signal, () =>
+        applyPageStatus(ready.plan, signal),
+      )
+      if (result.changed && result.status === 'trashed')
+        question.undo = { kind: 'trash', page: result.page.ref, version: result.version, trashDate }
+      return result
     },
   })
 }
@@ -267,8 +389,18 @@ export function createTools(currentQuestion: () => WorkspaceQuestion) {
     }),
     pageWriteTool(currentQuestion, 'create'),
     pageWriteTool(currentQuestion, 'rename'),
-    pageEditTool(currentQuestion, 'edit'),
-    pageEditTool(currentQuestion, 'undo'),
+    pageEditTool(currentQuestion),
+    undoWorkspaceTool(currentQuestion),
+    pageStatusTool(currentQuestion, 'trash'),
+    pageStatusTool(currentQuestion, 'restore'),
+    defineTool({
+      name: 'list_page_comments',
+      description:
+        'Read a bounded batch of comments and replies on a published page, with links and parent comment IDs.',
+      args: commentsArgs,
+      run: async (args, signal) => listPageComments(args, await currentTab(), signal),
+    }),
+    commentTool(currentQuestion),
     organizationTool(currentQuestion, 'move'),
     organizationTool(currentQuestion, 'copy'),
   ]

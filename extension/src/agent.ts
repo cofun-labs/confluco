@@ -52,8 +52,8 @@ export interface ToolSpec {
    * The arguments come from the model: a tool parses them before it uses them.
    */
   run: (args: unknown, signal?: AbortSignal) => Promise<unknown>
-  /** The tool does what is hard to undo, such as deleting a page, so the user must agree each time before it runs. */
-  needsConfirmation?: boolean
+  /** Whether the tool requires consent before running. A function can inspect the prepared preview. */
+  needsConfirmation?: boolean | (() => boolean)
   /**
    * The tool changes the user's data. When a question stops after such a tool ran and changed
    * something, or may have (its error has `mayHaveChanged`), the user is told to check before
@@ -160,8 +160,6 @@ export class CopilotAgent {
   private agent?: Agent
   private model?: Model<'openai-completions'>
   private readonly maxSteps: number
-  /** Names of the tools that need the user's OK before each run. */
-  private readonly confirmed: Set<string>
   private readonly tools: Map<string, ToolSpec>
   /** Bumped by stop() and reset(), so a question still waiting to start knows it was cancelled. */
   private epoch = 0
@@ -181,7 +179,6 @@ export class CopilotAgent {
   private stopReason?: string
   constructor(private readonly config: AgentConfig) {
     this.maxSteps = config.maxSteps ?? DEFAULT_MAX_STEPS
-    this.confirmed = new Set(config.tools.filter((t) => t.needsConfirmation).map((t) => t.name))
     this.tools = new Map(config.tools.map((t) => [t.name, t]))
   }
 
@@ -311,7 +308,8 @@ export class CopilotAgent {
       // they ask the user on this call's card.
       running = { id: toolCall.id, name: toolCall.name, args }
       // From the arguments the tool runs with, and before it runs: the run may change what the preview reads.
-      const { preview, stop } = await previewCall(this.tools.get(toolCall.name), args, signal)
+      const tool = this.tools.get(toolCall.name)
+      const { preview, stop } = await previewCall(tool, args, signal)
       // Stopped while the preview looked things up: the tool must not start.
       if (signal?.aborted || epoch !== this.epoch) {
         running = undefined
@@ -329,7 +327,8 @@ export class CopilotAgent {
       onUpdate({ type: 'tool_ready', id: toolCall.id, args, preview })
       const call: ToolCallRequest = { id: toolCall.id, name: toolCall.name, args, preview }
       running = call
-      if (!this.confirmed.has(toolCall.name)) {
+      const needsConfirmation = tool?.needsConfirmation
+      if (!(typeof needsConfirmation === 'function' ? needsConfirmation() : needsConfirmation)) {
         started.add(toolCall.id)
         return
       }

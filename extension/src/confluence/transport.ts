@@ -118,11 +118,16 @@ export function writeConfluenceLabel(target: ConfluenceTab, id: string, write: L
   )
 }
 
-export function createConfluencePage(target: ConfluenceTab, body: unknown, signal?: AbortSignal) {
+export function createConfluenceContent<T extends { type: 'page' | 'comment' }>(
+  target: ConfluenceTab,
+  body: T,
+  signal?: AbortSignal,
+) {
   return sendConfluence(
     target,
     { area: 'api', resource: 'content', method: 'POST', query: {}, body: JSON.stringify(body) },
     signal,
+    body.type === 'comment' ? 'Confluence rejected the comment. Check the page and reply target.' : undefined,
   )
 }
 
@@ -134,7 +139,29 @@ export function updateConfluencePage(target: ConfluenceTab, id: string, body: un
   )
 }
 
-async function sendConfluence(target: ConfluenceTab, request: RestRequest, signal?: AbortSignal) {
+export function trashConfluencePage(target: ConfluenceTab, id: string, signal?: AbortSignal) {
+  return sendConfluence(
+    target,
+    { area: 'api', resource: `content/${id}`, method: 'DELETE', query: { status: 'current' } },
+    signal,
+  )
+}
+
+export function restoreConfluencePage(target: ConfluenceTab, id: string, nextVersion: number, signal?: AbortSignal) {
+  return sendConfluence(
+    target,
+    {
+      area: 'api',
+      resource: `content/${id}`,
+      method: 'PUT',
+      query: { status: 'trashed' },
+      body: JSON.stringify({ id, status: 'current', version: { number: nextVersion } }),
+    },
+    signal,
+  )
+}
+
+async function sendConfluence(target: ConfluenceTab, request: RestRequest, signal?: AbortSignal, rejection?: string) {
   signal?.throwIfAborted()
   if (!(await chrome.permissions.contains({ origins: [target.instance.permission] }))) {
     refuse('Confluco needs Chrome site access. Reconnect this Confluence instance and try again.')
@@ -187,6 +214,11 @@ async function sendConfluence(target: ConfluenceTab, request: RestRequest, signa
   if (response.data.kind !== 'ok') {
     const { kind } = response.data
     if (writing && ['auth', 'large', 'network', 'invalid'].includes(kind)) uncertain()
+    if (kind === 'rejected' && rejection) refuse(rejection)
+    if (kind === 'rejected' && request.method === 'PUT' && request.query.status === 'trashed')
+      refuse('Confluence rejected the restore. Check the page in the space trash before trying again.')
+    if (kind === 'rejected' && request.method === 'DELETE' && request.query.status === 'current')
+      refuse('Confluence rejected moving this page to the trash. Review the page in Confluence before trying again.')
     if (
       kind === 'rejected' &&
       (request.method === 'PUT' || (request.method === 'POST' && request.resource === 'content'))
@@ -234,9 +266,13 @@ async function requestConfluence(expectedUrl: string, contextPath: string, reque
   if (area === 'experimental' && (method !== 'GET' || !/^content\/\d{1,20}\/version$/.test(resource)))
     return { kind: 'invalid' }
   const labelResource = /^content\/\d{1,20}\/label$/.test(resource)
+  const pageResource = /^content\/\d{1,20}$/.test(resource)
   if (method === 'POST' && resource !== 'content' && !labelResource) return { kind: 'invalid' }
-  if (method === 'PUT' && !/^content\/\d{1,20}$/.test(resource)) return { kind: 'invalid' }
-  if (method === 'DELETE' && !labelResource) return { kind: 'invalid' }
+  if (method === 'PUT' && !pageResource) return { kind: 'invalid' }
+  if (method === 'DELETE' && !labelResource) {
+    // Deleting content in any other status could purge it. Only a current page may enter the trash.
+    if (!pageResource || query.status !== 'current' || Object.keys(query).length !== 1) return { kind: 'invalid' }
+  }
   const apiPath = `${contextPath}/rest/${area}/`
   const endpoint = new URL(actual.origin + apiPath + resource)
   if (endpoint.origin !== actual.origin || !endpoint.pathname.startsWith(apiPath) || endpoint.hash || endpoint.search)

@@ -50,7 +50,11 @@ For page creation and rename, the panel takes the exact title, chosen target and
 
 Text edits bind the quoted passage and replacement to the user's current request. The preview resolves a unique text range in the published storage and shows the target and replacement. Before applying the edit, the tool checks the original page and version again. It replaces that range in the original storage and verifies the next version and full body. An uncertain response allows a verification read if the question is still running. The write is attempted once.
 
-The saved conversation keeps a local undo record for its most recent verified text edit. Before another workspace write starts, the panel clears the saved record so it cannot become stale if the conversation closes during the write. Undo checks the current version and reconstructs the original edit from the earlier storage before restoring that storage as a new version.
+Trash and restore use the page ID chosen in the user's request. The tool previews the target, checks its state again before changing it, and reads back the resulting state and version. The trash request is scoped to published content, which Confluence moves to recoverable trash. The tool refuses top-level pages, pages with reported children and pages with access restrictions that might be lost on restore. The user confirms the trash action because the provider can move hidden child pages and restores pages to the space root. Restoration by link requires the user to review the access warning because the original access can be unknown. The restore request supplies the next version number and verification reports the version actually returned.
+
+The saved conversation keeps a local undo record for its latest verified text edit or trash action. Before another workspace write starts, the panel clears the saved record so it cannot become stale if the conversation closes during the write. One undo tool selects the reversal from that record. It reconstructs the original text edit from earlier storage or uses the saved page reference to restore it from the trash. Trash undo also compares the time Confluence reports for the trash action. If the instance did not provide a time, undo requires the same access review as a restore by link.
+
+Discussions return bounded comment batches with stable links and parent comment IDs. A direct post binds its page, optional parent and quoted text before the model calls the tool. The tool previews the destination and text, rechecks the parent and reads the posted comment back. Only footer comments and replies to verified footer comments can be written.
 
 Page organization binds both page targets and the copy title to the request. Same-space reparenting checks for cycles and refuses to drop inherited read restrictions. A copy is a new single page using the source body and the destination's inherited access. Copy preflight checks source restrictions and attachment references. Both tools recheck the targets and verify the resulting ancestry and storage.
 
@@ -79,6 +83,7 @@ extension/                Chrome extension
   src/confluence/labels.ts  paginated labels and requested mutations
   src/confluence/page-writes.ts  authorized creation, rename and text edits with read-back
   src/confluence/storage-edit.ts  exact text replacement in original page storage
+  src/confluence/comments.ts  paginated discussion reads and verified footer posts
   src/sidepanel/          React UI (main.tsx: sign-in, Chat.tsx: chat, Sessions.tsx: saved sessions,
                           ToolCall.tsx: one tool call and its changes)
   test/                   tests of client code and the whole panel in jsdom
