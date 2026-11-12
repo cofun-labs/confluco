@@ -1,6 +1,6 @@
 # Privacy
 
-Confluco opens an AI side panel on any website. This page describes what it reads, where data goes and what is retained. Service hosts come from the build configuration in `extension/.env.local`. The checked-in `.env.smoke` configuration uses synthetic hosts for network-isolated tests.
+Confluco opens an AI side panel on any website. This page describes what it reads, where data goes and what is retained. The hosts below are those of the hosted Confluco, set in the checked-in build configuration `extension/.env`. A build with other values in `extension/.env.local` uses that deployment's Worker and Clerk instance instead. The checked-in `.env.smoke` configuration uses synthetic hosts for network-isolated tests.
 
 ## What the extension reads
 
@@ -16,25 +16,27 @@ Confluco checks the active tab's URL for an HTTPS Atlassian Cloud wiki or a `con
 
 ## Where data goes
 
-The manifest's host permissions and content security policy enforce the configured destinations. Tests pin the permissions and policy.
+The extension sends requests to these hosts and no others. The manifest's host permissions and content security policy enforce them, and a test pins the permissions and policy of the hosted configuration.
 
 | Host | What is sent | Purpose |
 |---|---|---|
-| Configured Worker API origin (`VITE_API_URL`) | Clerk token, messages, relevant history, page title and canonical URL, assistant instructions and tool definitions and results, including requested Confluence page text, search, navigation, version, access, label and page write results | Model access |
-| Clerk Frontend API encoded in `VITE_CLERK_PUBLISHABLE_KEY` | Clerk session and token requests | Account access and sign-in |
+| `confluco-api.cofun.cc` (the Confluco Worker) | Clerk token, messages, relevant history, page title and canonical URL, assistant instructions and tool definitions and results, including requested Confluence page text, search, navigation, version, access, label and page write results | Model access |
+| `clerk.cofun.cc` (Clerk's Frontend API for the Cofun sign-in) | Clerk session and token requests | Account access and sign-in |
 | `img.clerk.com` | Avatar image requests | Account display |
 | User-connected Confluence base URL | Same-origin reads, search terms, space keys, page and parent IDs, version numbers, requested label changes, requested page titles and bodies for creation and rename, from the Confluence tab using that tab's session | Read, search and browse published pages, manage labels, create pages and rename pages |
 
-The extension also holds host permission for the Sync Host and its cookie domain. The parent-domain permission lets Chrome report the Clerk cookie that signals sign-in changes. It is used for cookie access. The extension sends no Confluence cookies or credentials to the Worker or Clerk. Cloudflare and Clerk see the connecting IP address as part of serving requests.
+The extension also holds a host permission for `*.cofun.cc`. Chrome reports a cookie only to an extension with permission for the cookie's domain, and Clerk sets the cookie that signals sign-in changes on the sign-in page's parent domain. The permission is used for that cookie access, and the extension sends no requests to any other host under `cofun.cc`.
+
+Sign-in is shared across the Cofun products (Confluco, Notico and others): one Clerk application holds the account, so signing in to one signs the same browser in to the others. Each product has its own Worker, quota and usage records. The extension sends no Confluence cookies or credentials to the Worker or Clerk. Cloudflare and Clerk see the connecting IP address as part of serving requests.
 
 ### The sign-in page
 
-Sign in opens the configured Sync Host's `/login` page in a normal tab. It loads Clerk's sign-in code from the Clerk Frontend API. Account details entered there are handled by Clerk and the chosen sign-in provider. The Worker serves the page. Clerk may report SDK telemetry from a development instance's sign-in page. Telemetry is disabled inside the extension. See [Clerk's privacy policy](https://clerk.com/legal/privacy).
+Sign in opens `https://confluco-api.cofun.cc/login` in a normal tab. It loads Clerk's sign-in code from Clerk's Frontend API (`clerk.cofun.cc`). Account details entered there are handled by Clerk and the chosen sign-in provider. The Worker serves the page. Clerk may report SDK telemetry from a development instance's sign-in page. Telemetry is disabled inside the extension. See [Clerk's privacy policy](https://clerk.com/legal/privacy).
 
 ## What the Worker does with it
 
 - It verifies the session token locally with Clerk's public key and uses the Clerk user ID.
-- It sends the conversation to Cloudflare Workers AI and streams the reply. AI Gateway is optional. The bundled Worker disables Gateway prompt/reply log collection and caching, retaining request analytics. See [Cloudflare's privacy policy](https://www.cloudflare.com/privacypolicy/).
+- It sends the conversation to Cloudflare Workers AI and streams the reply. Requests go through Cloudflare AI Gateway, which the Cofun products share. The Worker disables Gateway prompt/reply log collection and caching, so the gateway retains request analytics (counts, tokens, cost) tagged with the product and the Clerk user ID. See [Cloudflare's privacy policy](https://www.cloudflare.com/privacypolicy/).
 - A Durable Object keeps each user's daily request counter.
 - Each authenticated chat request produces a usage record containing user ID, model, outcome, finish reason, streaming mode, message count, input size, token counts and duration. Prompt and reply text is excluded. Analytics Engine retains these records for 90 days.
 - Workers Logs contain invocation metadata such as time, URL and status. Provider failures are logged as the provider returns them. These diagnostic logs are separate from the usage records described above.
@@ -51,4 +53,4 @@ The extension has no advertising or analytics tracking and loads no remote execu
 
 ## Changes and contact
 
-Changes to data collection or destinations update this document in the same PR. Its [history](https://github.com/kitfun/confluco/commits/main/PRIVACY.md) records those changes. Questions and reports can be filed as [issues](https://github.com/kitfun/confluco/issues).
+Changes to data collection or destinations update this document in the same PR. Its [history](https://github.com/cofun-labs/confluco/commits/main/PRIVACY.md) records those changes. Questions and reports can be filed as [issues](https://github.com/cofun-labs/confluco/issues).
