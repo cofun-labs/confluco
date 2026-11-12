@@ -48,6 +48,8 @@ The version list uses the experimental version endpoint on Confluence 8.5 when a
 
 For page creation and rename, the panel takes the exact title, chosen target and any creation text from the user's message. The tool resolves the target and prepares a preview before executing that request. Creation checks for the title in the chosen space first. Rename submits the next published version with the original storage body. Both read the page back before reporting success.
 
+Text edits bind the quoted passage and replacement to the user's current request. The preview resolves a unique text range in the published storage and shows the target and replacement. After confirmation, the tool checks the original page and version again, replaces that range in the original storage, and verifies the next version and full body. An uncertain response allows a verification read if the question is still running. It never repeats the write.
+
 ## Layout
 
 ```
@@ -71,7 +73,8 @@ extension/                Chrome extension
   src/confluence/navigation.ts  search, space browsing and page hierarchy
   src/confluence/history.ts  published versions and reported page access
   src/confluence/labels.ts  paginated labels and requested mutations
-  src/confluence/page-writes.ts  authorized page creation and versioned rename with read-back
+  src/confluence/page-writes.ts  authorized creation, rename and text edits with read-back
+  src/confluence/storage-edit.ts  exact text replacement in original page storage
   src/sidepanel/          React UI (main.tsx: sign-in, Chat.tsx: chat, Sessions.tsx: saved sessions,
                           ToolCall.tsx: one tool call and its changes)
   test/                   tests of client code and the whole panel in jsdom

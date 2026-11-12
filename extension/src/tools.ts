@@ -11,14 +11,17 @@ import {
   treeArgs,
 } from './confluence/navigation'
 import {
+  applyPageEdit,
   applyPageWrite,
   describePageWrite,
   pageTitleArgs,
+  preparePageEdit,
   preparePageWrite,
+  type PageEditRequest,
   type PageWriteRequest,
 } from './confluence/page-writes'
 import { readPage } from './confluence/read-page'
-import type { ConfluenceTab } from './confluence/transport'
+import { refuse, type ConfluenceTab } from './confluence/transport'
 import { defineTool } from './tool'
 import { z } from './zod'
 
@@ -26,10 +29,43 @@ export interface WorkspaceQuestion {
   tab: Promise<ConfluenceTab | undefined>
   labelChanges: LabelRequest[]
   pageWrite?: PageWriteRequest
+  pageEdit?: PageEditRequest
 }
 
 const writeOutcome = z.object({ changed: z.boolean() })
 const changesData = (result: unknown) => writeOutcome.safeParse(result).data?.changed !== false
+
+function pageEditTool(currentQuestion: () => WorkspaceQuestion) {
+  let prepared: { question: WorkspaceQuestion; plan: Awaited<ReturnType<typeof preparePageEdit>> } | undefined
+  return defineTool({
+    name: 'edit_page',
+    description:
+      'Preview and confirm a targeted text replacement on a published page. Use only for a direct request like Replace "OLD" with "NEW" on this page. The page and exact text come from the user message.',
+    args: z.strictObject({}),
+    needsConfirmation: true,
+    changesData: true,
+    preview: async (_args, signal) => {
+      prepared = undefined
+      const question = currentQuestion()
+      const request = question.pageEdit
+      if (!request) refuse('Ask the user to say Replace "OLD" with "NEW" on this page.')
+      question.pageEdit = undefined
+      const plan = await preparePageEdit(request, await question.tab, signal)
+      signal?.throwIfAborted()
+      if (currentQuestion() !== question) return undefined
+      prepared = { question, plan }
+      return plan.preview
+    },
+    run: async (_args, signal) => {
+      signal?.throwIfAborted()
+      const ready = prepared
+      prepared = undefined
+      if (ready?.question !== currentQuestion())
+        throw new Error('Ask the user to say Replace "OLD" with "NEW" on this page.')
+      return applyPageEdit(ready.plan, signal)
+    },
+  })
+}
 
 function pageWriteTool(currentQuestion: () => WorkspaceQuestion, action: PageWriteRequest['action']) {
   let prepared: { question: WorkspaceQuestion; plan: Awaited<ReturnType<typeof preparePageWrite>> } | undefined
@@ -150,5 +186,6 @@ export function createTools(currentQuestion: () => WorkspaceQuestion) {
     }),
     pageWriteTool(currentQuestion, 'create'),
     pageWriteTool(currentQuestion, 'rename'),
+    pageEditTool(currentQuestion),
   ]
 }

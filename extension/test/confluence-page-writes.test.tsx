@@ -321,3 +321,111 @@ describe('rename a published page', () => {
     expect(writes(browser)).toHaveLength(1)
   })
 })
+
+describe('edit published page text', () => {
+  const edit = 'Replace "Status A & B" with "Ready <today>" on this page'
+  const editCall = { name: 'edit_page', arguments: '{}' }
+  const preserved =
+    '<ac:structured-macro ac:name="info"><ac:parameter ac:name="title">Status A &amp; B</ac:parameter>' +
+    '<ac:rich-text-body><p>Keep me</p></ac:rich-text-body></ac:structured-macro>' +
+    '<table><tbody><tr><td><ac:link><ri:attachment ri:filename="guide.pdf" /></ac:link></td>' +
+    '<td><ac:link><ri:user ri:userkey="synthetic-user" /></ac:link></td></tr></tbody></table>' +
+    '<custom:tag attribute="a > b"><![CDATA[Status A & B <raw>]]></custom:tag>'
+  const body = '<p>Prefix: Status A &#38; B. Keep &#160; suffix.</p>' + preserved
+  const expected = '<p>Prefix: Ready &lt;today&gt;. Keep &#160; suffix.</p>' + preserved
+  const original = { ...parent, body: { storage: storage(body) } }
+  const updated = { ...original, body: { storage: storage(expected) }, version: { number: 3 } }
+
+  it('[UC-CONFLUENCE-008-S01] previews and preserves exact surrounding storage after confirmation', async () => {
+    const { browser, user } = await openPanel()
+    let written = false
+    browser.confluenceResponse = (url, init) => {
+      expect(new URL(url).pathname).toBe(`${contentPath}/42`)
+      if (init?.method === 'PUT') {
+        written = true
+        expect(init.body).toEqual(
+          JSON.stringify({ type: 'page', title: original.title, version: { number: 3 }, body: updated.body }),
+        )
+      }
+      return Response.json(written ? updated : original)
+    }
+    browser.ai.script.push({ toolCalls: [editCall] }, { reply: 'The edit was verified.' })
+    await ask(user, edit)
+    const allow = await screen.findByRole('button', { name: 'Allow' })
+    expect(screen.getByText(/Edit "Parent fixture".*version 2/)).toHaveTextContent(
+      'Before: "Status A & B" After: "Ready <today>"',
+    )
+    expect(writes(browser)).toEqual([])
+    await user.click(allow)
+    expect(await screen.findByText('The edit was verified.')).toBeVisible()
+    expect(writes(browser)).toHaveLength(1)
+    expect(browser.workspaceRequests.at(-1)?.init?.method).toBe('GET')
+    expect(modelResults(browser)).toContain('"version":3,"changed":true,"bodyVerified":true')
+    expect(modelResults(browser)).not.toContain(preserved)
+  })
+
+  it.each([
+    [edit, body + '<p>Status A &amp; B</p>', /appears more than once/],
+    [edit, '<p>Status <em>A &amp; B</em></p>', /not found in one editable text segment/],
+    ['Summarize this page', body, /Ask the user to say Replace/],
+  ])('[UC-CONFLUENCE-008-S02] refuses unapproved or ambiguous edits from %s', async (message, value, reason) => {
+    const { browser, user } = await openPanel()
+    browser.confluenceResponse = () => Response.json({ ...original, body: { storage: storage(value) } })
+    browser.ai.script.push({ toolCalls: [editCall] })
+    await ask(user, message)
+    await answered()
+    expect(screen.getAllByText(reason).length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: 'Allow' })).not.toBeInTheDocument()
+    expect(writes(browser)).toEqual([])
+  })
+
+  it('[UC-CONFLUENCE-008-S02] does not repeat a declined edit during the same question', async () => {
+    const { browser, user } = await openPanel()
+    browser.confluenceResponse = () => Response.json(original)
+    browser.ai.script.push({ toolCalls: [editCall, editCall] })
+    await ask(user, edit)
+    await user.click(await screen.findByRole('button', { name: 'Deny' }))
+    await answered()
+    expect(writes(browser)).toEqual([])
+    expect(screen.queryByRole('button', { name: 'Allow' })).not.toBeInTheDocument()
+  })
+
+  it.each([false, true])('[UC-CONFLUENCE-008-S03] protects newer content (server conflict %s)', async (conflict) => {
+    const { browser, user } = await openPanel()
+    let newer = false
+    browser.confluenceResponse = (_url, init) => {
+      if (init?.method === 'PUT') return new Response(null, { status: 409 })
+      return Response.json(newer && !conflict ? { ...original, version: { number: 3 } } : original)
+    }
+    browser.ai.script.push({ toolCalls: [editCall, editCall] })
+    await ask(user, edit)
+    const allow = await screen.findByRole('button', { name: 'Allow' })
+    newer = true
+    await user.click(allow)
+    await answered()
+    expect(screen.getAllByText(conflict ? /has a newer version/ : /changed after the preview/).length).toBeGreaterThan(
+      0,
+    )
+    expect(writes(browser)).toHaveLength(conflict ? 1 : 0)
+  })
+
+  it.each([false, true])('[UC-CONFLUENCE-008-S04] verifies an uncertain write once (applied %s)', async (applied) => {
+    const { browser, user } = await openPanel()
+    let dispatched = false
+    browser.confluenceResponse = (_url, init) => {
+      if (init?.method === 'PUT') {
+        dispatched = true
+        return new Response(null, { status: 503 })
+      }
+      return Response.json(dispatched && applied ? updated : original)
+    }
+    browser.ai.script.push({ toolCalls: [editCall] }, { reply: 'Verified after read-back.' })
+    await ask(user, edit)
+    await user.click(await screen.findByRole('button', { name: 'Allow' }))
+    await answered()
+    expect(writes(browser)).toHaveLength(1)
+    expect(browser.workspaceRequests.at(-1)?.init?.method).toBe('GET')
+    if (applied) expect(modelResults(browser)).toContain('"recovered":true')
+    else expect(screen.getAllByText(/resulting page could not be verified/).length).toBeGreaterThan(0)
+  })
+})

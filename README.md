@@ -20,12 +20,13 @@
 | Search and browse | Find published pages by title or text and explore spaces, homepages, ancestors and children on the connected instance. |
 | History and labels | Inspect older page versions and available operations. View labels or ask to add or remove a named label on the current page. |
 | Create and rename pages | Publish a child page with optional plain text or rename a published page on the connected instance. |
+| Edit page text | Preview and confirm a replacement for one exact text passage while preserving the surrounding content. |
 | Stay in context | Each question includes the current supported Confluence page's title and URL. |
 | Draft | Work with text you provide in the conversation. |
 | Keep sessions | Save conversations locally, search by title, filter by starting page, and continue earlier chats. |
 | Sign in | Use Google through the web sign-in page and keep the side panel in sync. |
 
-Editing and comments are planned. Confluence Cloud pages currently provide title and link context.
+Confluence Cloud pages currently provide title and link context.
 
 ## Get started
 
@@ -36,6 +37,7 @@ Editing and comments are planned. Confluence Cloud pages currently provide title
 5. Ask something, such as _Which page am I on?_ or _Draft an agenda for a product review_. Paste the text you want to revise into the chat.
 6. To change a label, open the intended published page and ask _Add label release-ready_ or _Remove label release-ready_.
 7. To create a page, open its parent and ask `Create page "Release checklist" under this page with text "Verify the build."`. To rename a page, open it and ask `Rename this page to "Launch checklist"`. Use the page's canonical link ending in `/pages/viewpage.action?pageId=…` in place of `this page` to choose a different page on the same instance.
+8. To edit a published page, ask `Replace "Release pending" with "Release ready" on this page` and confirm the preview. The quoted passage must occur once within a single text segment. If the page changed after the preview, review the current text and ask again.
 
 ## How it works
 

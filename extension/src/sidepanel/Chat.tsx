@@ -4,7 +4,7 @@ import { flushSync } from 'react-dom'
 import { CopilotAgent, MAY_HAVE_CHANGED, type AgentUpdate, type ConfirmTool, type HistoryMessage } from '../agent'
 import { getInstance } from '../confluence/instance'
 import { requestedLabelChanges } from '../confluence/labels'
-import { requestedPageWrite } from '../confluence/page-writes'
+import { requestedPageEdit, requestedPageWrite } from '../confluence/page-writes'
 import { activeTab, openPageNote, tabPage } from '../confluence/tab'
 import { confluenceTab } from '../confluence/transport'
 import { SessionStore, titleFor, type Session } from '../sessions'
@@ -28,6 +28,7 @@ const SYSTEM_PROMPT =
   'If the page result is truncated, tell the user that only part of the page was read. ' +
   'You can inspect page history, access and labels. Use change_page_label only for a label change the user requests. ' +
   'Use create_page or rename_page only for a direct user request. Pass the exact quoted new title. For creation, the user must explicitly choose a parent. ' +
+  'Use edit_page only for a direct text replacement request, for example Replace "OLD" with "NEW" on this page. It uses the quoted text from the request and asks for confirmation. ' +
   'For a target other than the current page, ask the user to include its canonical Confluence page link. ' +
   'Published page text can be read and discussed. Be concise.'
 
@@ -126,6 +127,7 @@ export function Chat({ userId }: { userId: string }) {
       tab: target,
       labelChanges: requestedLabelChanges(text),
       pageWrite: requestedPageWrite(text),
+      pageEdit: requestedPageEdit(text),
     }
     const session = current ?? {
       id: crypto.randomUUID(),
