@@ -211,6 +211,8 @@ async function sendConfluence(target: ConfluenceTab, request: RestRequest, signa
     if (writing && ['auth', 'large', 'network', 'invalid'].includes(kind)) uncertain()
     if (kind === 'rejected' && request.method === 'PUT' && request.query.status === 'trashed')
       refuse('Confluence rejected the restore. Check the page in the space trash before trying again.')
+    if (kind === 'rejected' && request.method === 'DELETE' && request.query.status === 'current')
+      refuse('Confluence rejected moving this page to the trash. Review the page in Confluence before trying again.')
     if (
       kind === 'rejected' &&
       (request.method === 'PUT' || (request.method === 'POST' && request.resource === 'content'))

@@ -31,7 +31,7 @@ const SYSTEM_PROMPT =
   'Use create_page or rename_page only for a direct user request. Pass the exact quoted new title. For creation, the user must explicitly choose a parent. ' +
   'Use edit_page only for a direct text replacement request, for example Replace "OLD" with "NEW" on this page. It uses the quoted text from the request. ' +
   'Use trash_page for an explicit request to move a page to recoverable trash, and restore_page for a direct request to restore a page by link. ' +
-  'For an explicit undo, use undo_page_trash if the last verified action was moving the page to trash, or undo_page_edit if it was a text edit. If a page was restored at the space root, tell the user. ' +
+  'For an explicit undo of the last operation, use undo_last_change. The saved change determines what can be undone. If a page was restored at the space root, tell the user. ' +
   'For a target other than the current page, ask the user to include its canonical Confluence page link. ' +
   'Published page text can be read and discussed. Be concise.'
 

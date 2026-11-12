@@ -12,15 +12,22 @@ import {
 } from './transport'
 
 const version = z.int().min(1).max(2_147_483_647)
+const trashDate = z.union([z.string().min(1).max(100), z.int().positive()])
 const pageState = publishedPage.extend({
   status: z.enum(['current', 'trashed']),
   version: z.object({ number: version }),
   space: z.object({ key: z.string().min(1).max(255) }),
   ancestors: z.array(z.object({ id: pageReference.shape.id })),
+  metadata: z.object({ trashdate: trashDate.optional().catch(undefined) }).optional(),
 })
 type PageState = z.output<typeof pageState>
 export type PageStatusRequest = { action: 'trash' | 'restore'; targetUrl?: string }
-export const pageTrashUndo = z.strictObject({ kind: z.literal('trash'), page: pageReference, version })
+export const pageTrashUndo = z.strictObject({
+  kind: z.literal('trash'),
+  page: pageReference,
+  version,
+  trashDate: trashDate.optional(),
+})
 export type PageTrashUndo = z.output<typeof pageTrashUndo>
 
 const trashEnglish =
@@ -42,7 +49,7 @@ async function readState(tab: ConfluenceTab, ref: PageReference | undefined, sig
   const response = await getConfluence(
     tab,
     pageResource(tab, ref),
-    { status: 'any', expand: 'version,space,ancestors' },
+    { status: 'any', expand: 'version,space,ancestors,metadata' },
     signal,
   )
   const parsed = pageState.safeParse(response.data)
@@ -81,20 +88,27 @@ export async function preparePageStatus(
   const ref = undo?.page ?? requestedReference(tab, request.targetUrl)
   if (!ref && request.action === 'restore') refuse('Use the canonical link of the trashed page to restore it.')
   const page = await readState(tab, ref, signal)
-  if (undo && (page.status !== 'trashed' || page.version.number !== undo.version))
+  if (
+    undo &&
+    (page.status !== 'trashed' ||
+      page.version.number !== undo.version ||
+      (undo.trashDate !== undefined && page.metadata?.trashdate !== undo.trashDate))
+  )
     refuse('The page state changed after the last trash action. Review the page before restoring it.')
   if (request.action === 'trash' && page.status === 'current') await requireEligibleTrash(tab, page, signal)
   const link = pageLink(tab.instance, page)
   const name = `"${page.title}" (${link.url}) in space ${page.space.key}`
+  const reviewAccess = request.action === 'restore' && undo?.trashDate === undefined
   return {
     tab,
     ref: link.ref,
     page,
     action: request.action,
+    reviewAccess,
     preview:
       request.action === 'trash'
         ? `Move ${name} to the recoverable trash. Confluence restores pages at the space root and may move child pages that your account cannot see.`
-        : `Restore ${name} from the trash at the space root.${undo ? '' : ' Review who can access the page there before allowing this change.'}`,
+        : `Restore ${name} from the trash at the space root.${reviewAccess ? ' Review who can access the page there before allowing this change.' : ''}`,
   }
 }
 
@@ -109,12 +123,19 @@ export async function applyPageStatus(plan: Awaited<ReturnType<typeof preparePag
     !samePage(current, page) ||
     current.status !== page.status ||
     current.version.number !== page.version.number ||
+    current.metadata?.trashdate !== page.metadata?.trashdate ||
     current.ancestors.map(({ id }) => id).join('/') !== page.ancestors.map(({ id }) => id).join('/')
   )
     refuse('The page changed after the preview. Review its current state and ask again.')
   const desired = action === 'trash' ? 'trashed' : 'current'
   if (current.status === desired)
-    return { page: pageLink(tab.instance, current), status: desired, version: current.version.number, changed: false }
+    return {
+      page: pageLink(tab.instance, current),
+      status: desired,
+      version: current.version.number,
+      changed: false,
+      trashDate: undefined,
+    }
   const nextVersion = action === 'restore' ? current.version.number + 1 : current.version.number
   if (nextVersion > 2_147_483_647) refuse('This Confluence page cannot be advanced to another version.')
   if (action === 'trash') await requireEligibleTrash(tab, current, signal)
@@ -141,6 +162,10 @@ export async function applyPageStatus(plan: Awaited<ReturnType<typeof preparePag
     status: desired,
     version: verifiedVersion,
     changed: true,
+    trashDate:
+      action === 'trash' && verified.metadata?.trashdate !== current.metadata?.trashdate
+        ? verified.metadata?.trashdate
+        : undefined,
     ...(action === 'restore' && { atSpaceRoot: verified.ancestors.length === 0 }),
   }
 }
