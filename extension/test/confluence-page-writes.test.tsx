@@ -51,9 +51,9 @@ async function ask(user: UserEvent, message: string) {
 const answered = () => screen.findByRole('button', { name: 'Send' })
 const writes = (browser: FakeBrowser) => browser.workspaceRequests.filter(({ init }) => init?.method !== 'GET')
 
-function pendingResponse() {
-  let release!: (response: Response) => void
-  const promise = new Promise<Response>((resolve) => (release = resolve))
+function pendingResponse<T = Response>() {
+  let release!: (response: T) => void
+  const promise = new Promise<T>((resolve) => (release = resolve))
   return { promise, release }
 }
 
@@ -319,5 +319,204 @@ describe('rename a published page', () => {
     )
     expect(screen.queryByText(/Some changes in this question may already have been made/)).not.toBeInTheDocument()
     expect(writes(browser)).toHaveLength(1)
+  })
+})
+
+describe('edit published page text', () => {
+  const edit = 'Replace "Status A & B" with `QA\'s "ready" <today>` on this page'
+  const editCall = { name: 'edit_page', arguments: '{}' }
+  const preserved =
+    '<ac:structured-macro ac:name="info"><ac:parameter ac:name="title">Status A &amp; B</ac:parameter>' +
+    '<ac:rich-text-body><p>Keep me</p></ac:rich-text-body></ac:structured-macro>' +
+    '<table><tbody><tr><td><ac:link><ri:attachment ri:filename="guide.pdf" /></ac:link></td>' +
+    '<td><ac:link><ri:user ri:userkey="synthetic-user" /></ac:link></td></tr></tbody></table>' +
+    '<custom:tag attribute="a > b"><![CDATA[Status A & B <raw>]]></custom:tag>'
+  const tasks =
+    '<ac:task-list><ac:task><ac:task-id>19</ac:task-id><ac:task-uuid>fixture-id</ac:task-uuid>' +
+    '<ac:task-status>incomplete</ac:task-status><ac:task-body>Check the release</ac:task-body></ac:task></ac:task-list>'
+  const body = '<p>Prefix: Status A &#38; B. Keep &#160; suffix.</p>' + preserved
+  const expected = "<p>Prefix: QA's &quot;ready&quot; &lt;today&gt;. Keep &#160; suffix.</p>" + preserved
+  const original = { ...parent, body: { storage: storage(body) } }
+  const updated = { ...original, body: { storage: storage(expected) }, version: { number: 3 } }
+
+  it('[UC-CONFLUENCE-008-S01] shows the edit before dispatch and preserves surrounding storage', async () => {
+    const { browser, user } = await openPanel()
+    let written = false
+    browser.confluenceResponse = (url, init) => {
+      expect(new URL(url).pathname).toBe(`${contentPath}/42`)
+      if (init?.method === 'PUT') {
+        expect(screen.getByText(/Edit "Parent fixture".*version 2/)).toHaveTextContent('Before: "Status A & B"')
+        expect(screen.queryByRole('button', { name: 'Allow' })).not.toBeInTheDocument()
+        written = true
+        expect(init.body).toEqual(
+          JSON.stringify({ type: 'page', title: original.title, version: { number: 3 }, body: updated.body }),
+        )
+      }
+      return Response.json(written ? updated : original)
+    }
+    browser.ai.script.push({ toolCalls: [editCall] }, { reply: 'The edit was verified.' })
+    await ask(user, edit)
+    expect(await screen.findByText('The edit was verified.')).toBeVisible()
+    expect(writes(browser)).toHaveLength(1)
+    expect(browser.workspaceRequests.at(-1)?.init?.method).toBe('GET')
+    expect(modelResults(browser)).toContain('"version":3,"changed":true,"bodyVerified":true')
+    expect(modelResults(browser)).not.toContain(preserved)
+  })
+
+  it.each([
+    [edit, body + '<p>Status A &amp; B</p>', /appears more than once/],
+    [edit, '<p>Status <em>A &amp; B</em></p>', /not found in one editable text segment/],
+    ['Replace "incomplete" with "complete" on this page', tasks, /not found in one editable text segment/],
+    ['Summarize this page', body, /Ask the user to say Replace/],
+  ])('[UC-CONFLUENCE-008-S02] refuses unapproved or ambiguous edits from %s', async (message, value, reason) => {
+    const { browser, user } = await openPanel()
+    browser.confluenceResponse = () => Response.json({ ...original, body: { storage: storage(value) } })
+    browser.ai.script.push({ toolCalls: [editCall] })
+    await ask(user, message)
+    await answered()
+    expect(screen.getAllByText(reason).length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: 'Allow' })).not.toBeInTheDocument()
+    expect(writes(browser)).toEqual([])
+  })
+
+  it('refuses a replacement that would create a reserved storage sequence', async () => {
+    const { browser, user } = await openPanel()
+    browser.confluenceResponse = () => Response.json({ ...original, body: { storage: storage('<p>OLD> suffix</p>') } })
+    browser.ai.script.push({ toolCalls: [editCall] })
+    await ask(user, 'Replace "OLD" with "]]" on this page')
+    await answered()
+    expect(writes(browser)).toEqual([])
+    expect(screen.getAllByText(/reserved markup sequence/).length).toBeGreaterThan(0)
+  })
+
+  it.each([false, true])('[UC-CONFLUENCE-008-S03] protects newer content (server conflict %s)', async (conflict) => {
+    const { browser, user } = await openPanel()
+    browser.confluenceResponse = (_url, init) => {
+      if (init?.method === 'PUT') return new Response(null, { status: 409 })
+      return Response.json(
+        browser.workspaceRequests.length > 1 && !conflict ? { ...original, version: { number: 3 } } : original,
+      )
+    }
+    browser.ai.script.push({ toolCalls: [editCall, editCall] })
+    await ask(user, edit)
+    await answered()
+    expect(screen.getAllByText(conflict ? /has a newer version/ : /changed after the preview/).length).toBeGreaterThan(
+      0,
+    )
+    expect(writes(browser)).toHaveLength(conflict ? 1 : 0)
+  })
+
+  it.each([false, true])('[UC-CONFLUENCE-008-S04] verifies an uncertain write once (applied %s)', async (applied) => {
+    const { browser, user } = await openPanel()
+    let dispatched = false
+    browser.confluenceResponse = (_url, init) => {
+      if (init?.method === 'PUT') {
+        dispatched = true
+        return new Response(null, { status: 503 })
+      }
+      return Response.json(dispatched && applied ? updated : original)
+    }
+    browser.ai.script.push({ toolCalls: [editCall] }, { reply: 'Verified after read-back.' })
+    await ask(user, edit)
+    await answered()
+    expect(writes(browser)).toHaveLength(1)
+    expect(browser.workspaceRequests.at(-1)?.init?.method).toBe('GET')
+    if (applied) expect(modelResults(browser)).toContain('"recovered":true')
+    else expect(screen.getAllByText(/resulting page could not be verified/).length).toBeGreaterThan(0)
+  })
+
+  const undoCall = { name: 'undo_page_edit', arguments: '{}' }
+  const historical = { ...original, status: 'historical' }
+
+  it('[UC-CONFLUENCE-008-S06] undoes the last edit after reopening its conversation', async () => {
+    const { browser, user } = await openPanel()
+    let published = original
+    browser.confluenceResponse = (url, init) => {
+      const endpoint = new URL(url)
+      if (endpoint.searchParams.get('version') === '2') return Response.json(historical)
+      if (init?.method === 'PUT') {
+        if (published.version.number === 2) published = updated
+        else {
+          expect(screen.getByText(/Undo the edit on "Parent fixture".*version 3/)).toBeVisible()
+          expect(init.body).toEqual(
+            JSON.stringify({ type: 'page', title: original.title, version: { number: 4 }, body: original.body }),
+          )
+          published = { ...original, version: { number: 4 } }
+        }
+      }
+      return Response.json(published)
+    }
+    browser.ai.script.push({ toolCalls: [editCall] }, { reply: 'Edited the page.' })
+    await ask(user, edit)
+    await answered()
+    await user.click(screen.getByRole('button', { name: 'New chat' }))
+    await user.click(screen.getByRole('button', { name: 'Sessions' }))
+    await user.click(await screen.findByRole('button', { name: /Replace "Status A & B"/ }))
+    browser.ai.script.push({ toolCalls: [undoCall] })
+    await ask(user, 'Summarize this page')
+    await answered()
+    expect(screen.getAllByText(/explicitly request undoing/).length).toBeGreaterThan(0)
+    expect(writes(browser)).toHaveLength(1)
+    browser.ai.script.push({ toolCalls: [undoCall] }, { reply: 'Restored the previous text.' })
+    await ask(user, '撤销上次操作')
+    expect(await screen.findByText('Restored the previous text.')).toBeVisible()
+    expect(writes(browser)).toHaveLength(2)
+    expect(modelResults(browser)).toContain('"version":4,"changed":true,"bodyVerified":true')
+  })
+
+  it.each([false, true])(
+    '[UC-CONFLUENCE-008-S07] refuses undo without a matching current edit (newer %s)',
+    async (newer) => {
+      const { browser, user } = await openPanel()
+      let written = false
+      let bumped = false
+      browser.confluenceResponse = (_url, init) => {
+        if (init?.method === 'PUT') written = true
+        return Response.json(bumped ? { ...updated, version: { number: 4 } } : written ? updated : original)
+      }
+      if (newer) {
+        browser.ai.script.push({ toolCalls: [editCall] }, { reply: 'Edited the page.' })
+        await ask(user, edit)
+        await answered()
+        bumped = true
+      }
+      browser.ai.script.push({ toolCalls: [undoCall] })
+      await ask(user, 'Undo the last operation')
+      await answered()
+      const error = newer ? /page has changed since the last edit/ : /last workspace change.*can be undone/
+      expect(screen.getAllByText(error).length).toBeGreaterThan(0)
+      expect(writes(browser)).toHaveLength(newer ? 1 : 0)
+    },
+  )
+
+  it('clears the saved undo before a later write can outlive the open chat', async () => {
+    const { browser, user } = await openPanel()
+    let edited = false
+    const dispatched = pendingResponse<void>()
+    const response = pendingResponse()
+    const created = { ...child, body: { storage: storage('<p></p>') } }
+    browser.confluenceResponse = (url, init) => {
+      if (init?.method === 'PUT') edited = true
+      if (init?.method === 'POST') {
+        dispatched.release()
+        return response.promise
+      }
+      return Response.json(new URL(url).pathname === contentPath ? { results: [] } : edited ? updated : original)
+    }
+    browser.ai.script.push({ toolCalls: [editCall] }, { reply: 'Edited the page.' })
+    await ask(user, edit)
+    await answered()
+    browser.ai.script.push({ toolCalls: [createCall] })
+    await ask(user, command)
+    await dispatched.promise
+    await user.click(screen.getByRole('button', { name: 'New chat' }))
+    response.release(Response.json(created))
+    await user.click(screen.getByRole('button', { name: 'Sessions' }))
+    await user.click(await screen.findByRole('button', { name: /Replace "Status A & B"/ }))
+    browser.ai.script.push({ toolCalls: [undoCall] })
+    await ask(user, 'Undo the last operation')
+    await answered()
+    expect(screen.getAllByText(/last workspace change.*can be undone/).length).toBeGreaterThan(0)
+    expect(writes(browser)).toHaveLength(2)
   })
 })

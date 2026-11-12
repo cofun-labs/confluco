@@ -1,6 +1,7 @@
 // Saved sessions, kept on this device in IndexedDB. Relevant messages are sent again when a saved conversation is continued.
 import type { HistoryMessage } from './agent'
 import { confluencePageUrl } from './confluence/tab'
+import { z } from './zod'
 
 /** What the session list shows; the conversation itself is loaded only when a session opens. */
 export interface SessionInfo {
@@ -15,6 +16,8 @@ export interface SessionInfo {
 
 export interface Session extends SessionInfo {
   messages: HistoryMessage[]
+  /** Local undo record, validated when the conversation opens. */
+  undo?: unknown
 }
 
 // One database per account, so another account signed in on this browser never sees these sessions.
@@ -38,7 +41,7 @@ export class SessionStore {
    * this one is saved as a new session, under the new id in the result. The check and the write
    * are one transaction, so of two panels saving at once only one keeps the id.
    */
-  async save({ messages, ...info }: Session, loaded?: number): Promise<SessionInfo> {
+  async save({ messages, undo, ...info }: Session, loaded?: number): Promise<SessionInfo> {
     let saved = info
     let failure: unknown
     try {
@@ -49,7 +52,7 @@ export class SessionStore {
             // A session that is gone (deleted elsewhere) has nothing to overwrite.
             if (stored.result && stored.result.updatedAt !== loaded) saved = { ...info, id: crypto.randomUUID() }
             infos.put(saved)
-            all.put({ id: saved.id, messages })
+            all.put({ id: saved.id, messages, undo })
           } catch (err) {
             // A write that throws (e.g. data that can't be cloned) must not leave the other one committed.
             failure = err
@@ -67,8 +70,16 @@ export class SessionStore {
   async get(id: string): Promise<Session | undefined> {
     return this.run('readonly', (infos, all) => {
       const info = infos.get(id) as IDBRequest<SessionInfo | undefined>
-      const stored = all.get(id) as IDBRequest<{ messages: HistoryMessage[] } | undefined>
-      return () => info.result && { ...info.result, messages: stored.result?.messages ?? [] }
+      const stored = all.get(id) as IDBRequest<{ messages: HistoryMessage[]; undo?: unknown } | undefined>
+      return () => {
+        if (!info.result) return undefined
+        const data = stored.result
+        return {
+          ...info.result,
+          messages: data?.messages ?? [],
+          ...(data?.undo !== undefined && { undo: data.undo }),
+        }
+      }
     })
   }
 
@@ -76,6 +87,22 @@ export class SessionStore {
     await this.run('readwrite', (infos, all) => {
       infos.delete(id)
       all.delete(id)
+      return () => undefined
+    })
+  }
+
+  /** Drop a saved undo record before a new write can outlive the chat that started it. */
+  async clearUndo(id: string, loaded: number): Promise<void> {
+    const revision = z.object({ updatedAt: z.number() })
+    const conversation = z.looseObject({ id: z.literal(id), messages: z.array(z.unknown()), undo: z.unknown() })
+    await this.run('readwrite', (infos, all) => {
+      const info: IDBRequest<unknown> = infos.get(id)
+      const stored: IDBRequest<unknown> = all.get(id)
+      stored.onsuccess = () => {
+        if (revision.safeParse(info.result).data?.updatedAt !== loaded) return
+        const row = conversation.safeParse(stored.result).data
+        if (row?.undo !== undefined) all.put({ ...row, undo: undefined })
+      }
       return () => undefined
     })
   }

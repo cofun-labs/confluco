@@ -4,7 +4,13 @@ import { flushSync } from 'react-dom'
 import { CopilotAgent, MAY_HAVE_CHANGED, type AgentUpdate, type ConfirmTool, type HistoryMessage } from '../agent'
 import { getInstance } from '../confluence/instance'
 import { requestedLabelChanges } from '../confluence/labels'
-import { requestedPageWrite } from '../confluence/page-writes'
+import {
+  pageEditUndo,
+  requestedPageEdit,
+  requestedPageWrite,
+  requestedUndo,
+  type PageEditUndo,
+} from '../confluence/page-writes'
 import { activeTab, openPageNote, tabPage } from '../confluence/tab'
 import { confluenceTab } from '../confluence/transport'
 import { SessionStore, titleFor, type Session } from '../sessions'
@@ -28,6 +34,8 @@ const SYSTEM_PROMPT =
   'If the page result is truncated, tell the user that only part of the page was read. ' +
   'You can inspect page history, access and labels. Use change_page_label only for a label change the user requests. ' +
   'Use create_page or rename_page only for a direct user request. Pass the exact quoted new title. For creation, the user must explicitly choose a parent. ' +
+  'Use edit_page only for a direct text replacement request, for example Replace "OLD" with "NEW" on this page. It uses the quoted text from the request. ' +
+  'For an explicit request to undo the last operation, use undo_page_edit. The tool checks the saved change and the current page. ' +
   'For a target other than the current page, ask the user to include its canonical Confluence page link. ' +
   'Published page text can be read and discussed. Be concise.'
 
@@ -62,6 +70,7 @@ interface Current {
   page: Promise<Session['page']>
   /** As this panel loaded or last saved it; not set until the first save. */
   updatedAt?: number
+  undo?: PageEditUndo
 }
 
 /** The chat of one signed-in user; mount a new one for another user. */
@@ -122,16 +131,24 @@ export function Chat({ userId }: { userId: string }) {
     const target = Promise.all([tab, instance]).then(([currentTab, connected]) => confluenceTab(currentTab, connected))
     const page = Promise.all([tab, target]).then(([currentTab, bound]) => tabPage(currentTab, bound !== undefined))
     questionPage.current = page
-    workspaceQuestion.current = {
+    const session: Current = current ?? { id: crypto.randomUUID(), createdAt: Date.now(), page }
+    const question: WorkspaceQuestion = {
       tab: target,
       labelChanges: requestedLabelChanges(text),
       pageWrite: requestedPageWrite(text),
+      pageEdit: requestedPageEdit(text),
+      undoRequested: requestedUndo(text),
+      undo: current?.undo,
+      beforeWrite: async () => {
+        const clearing = saving.current.then(async () => {
+          const { id, updatedAt } = session
+          if (updatedAt !== undefined) await store.clearUndo(id, updatedAt)
+        })
+        saving.current = clearing.catch(() => {})
+        await clearing
+      },
     }
-    const session = current ?? {
-      id: crypto.randomUUID(),
-      createdAt: Date.now(),
-      page,
-    }
+    workspaceQuestion.current = question
     if (!current) setCurrent(session)
     setInput('')
     setBusy(true)
@@ -266,13 +283,15 @@ export function Chat({ userId }: { userId: string }) {
       // Another session that opened meanwhile already unlocked the composer, and the agent holds
       // that session now.
       if (chatId.current === id) {
+        const undo = question.undo
+        session.undo = undo
         setBusy(false)
         // A question that failed or was stopped before using a tool leaves the conversation as it
         // was; don't move the session to the top of the list for it. One that used tools keeps them.
         const messages = agent.history()
         if (messages.length !== before) {
           // One at a time: each save starts from the `updatedAt` the one before it stored.
-          saving.current = saving.current.then(() => save(session, messages, id, reply))
+          saving.current = saving.current.then(() => save(session, messages, id, reply, undo))
         }
       }
     }
@@ -282,7 +301,7 @@ export function Chat({ userId }: { userId: string }) {
    * Saves the session after a question; `chat` is the `chatId` it was open under and `reply` the
    * place of the question's reply in the list. Never rejects.
    */
-  async function save(session: Current, messages: HistoryMessage[], chat: number, reply: number) {
+  async function save(session: Current, messages: HistoryMessage[], chat: number, reply: number, undo?: PageEditUndo) {
     try {
       const page = await session.page
       const { id, createdAt, updatedAt: loaded } = session
@@ -296,6 +315,7 @@ export function Chat({ userId }: { userId: string }) {
           // Always a new value, so another panel that loaded this session can tell it changed.
           updatedAt: Math.max(Date.now(), (loaded ?? 0) + 1),
           messages,
+          undo,
         },
         loaded,
       )
@@ -325,6 +345,7 @@ export function Chat({ userId }: { userId: string }) {
         createdAt: session.createdAt,
         page: Promise.resolve(session.page),
         updatedAt: session.updatedAt,
+        undo: pageEditUndo.safeParse(session.undo).data,
       },
     )
     setView('chat')

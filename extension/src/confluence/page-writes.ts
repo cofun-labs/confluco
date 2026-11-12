@@ -1,6 +1,14 @@
 import { z } from '../zod'
 import { readableText } from './readable-text'
-import { fetchPublishedPage, pageLink, pageReference, publishedPage, type PageReference } from './references'
+import {
+  fetchPublishedPage,
+  pageLink,
+  pageReference,
+  pageResource,
+  publishedPage,
+  type PageReference,
+} from './references'
+import { replaceStorageText } from './storage-edit'
 import {
   createConfluencePage,
   getConfluence,
@@ -24,6 +32,17 @@ const storedPage = pageVersion.extend({
   body: z.object({ storage: z.object({ value: z.string(), representation: z.literal('storage') }) }),
 })
 const storedFields = 'space,ancestors,version,body.storage'
+const historicalStorage = storedPage.extend({
+  status: z.literal('historical'),
+  version: pageVersion.shape.version.extend({ hidden: z.boolean().optional() }),
+})
+export const pageEditUndo = z.strictObject({
+  page: pageReference,
+  version: pageVersion.shape.version.shape.number.min(2),
+  before: z.string().min(1).max(2000),
+  after: z.string().max(2000),
+})
+export type PageEditUndo = z.output<typeof pageEditUndo>
 
 export type PageWriteRequest =
   | { action: 'create'; title: string; targetUrl?: string; spaceKey?: string; text: string }
@@ -37,6 +56,30 @@ const createChinese =
   /^(?:请\s*)?在(?:当前(?:的)?页面?|本页|这(?:个)?页面?)下\s*创建(?:一个)?(?:子)?页面\s*(?<title>"[^"\r\n]+"|“[^”\r\n]+”|`[^`\r\n]+`)(?:\s*[，,]?\s*(?:正文|内容)(?:是|为)?\s*[：:]?\s*(?<text>"[^"]*"|“[^”]*”|`[^`]*`))?[。！!]?$/u
 const renameChinese =
   /^(?:请\s*)?(?:把|将)?(?:当前(?:的)?页面?|本页|这(?:个)?页面?)\s*(?:重命名为|改名为|改成)\s*(?<title>"[^"\r\n]+"|“[^”\r\n]+”|`[^`\r\n]+`)[。！!]?$/u
+
+const editEnglish =
+  /^(?:please\s+)?replace\s+(?<before>"[^"\r\n]+"|“[^”\r\n]+”|`[^`\r\n]+`)\s+with\s+(?<after>"[^"\r\n]*"|“[^”\r\n]*”|`[^`\r\n]*`)\s+on\s+(?:this\s+page|(?<target>https?:\/\/[^\s]+?))[.!]?$/iu
+const editChinese =
+  /^(?:请\s*)?在(?:当前(?:的)?页面?|本页|这(?:个)?页面?)(?:上)?\s*(?:把|将)\s*(?<before>"[^"\r\n]+"|“[^”\r\n]+”|`[^`\r\n]+`)\s*(?:替换为|改为|改成)\s*(?<after>"[^"\r\n]*"|“[^”\r\n]*”|`[^`\r\n]*`)[。！!]?$/u
+
+export interface PageEditRequest {
+  before: string
+  after: string
+  targetUrl?: string
+}
+
+export function requestedPageEdit(message: string): PageEditRequest | undefined {
+  const text = message.trim()
+  const match = (editEnglish.exec(text) ?? editChinese.exec(text))?.groups
+  if (!match) return undefined
+  return { before: match.before.slice(1, -1), after: match.after.slice(1, -1), targetUrl: match.target }
+}
+
+export function requestedUndo(message: string): boolean {
+  return /^(?:(?:please\s+)?undo (?:the |my )?(?:last|previous) (?:operation|change|edit)|(?:请\s*)?撤销(?:上次|上一次|上一条)(?:操作|改动|编辑))[.!。！]?$/iu.test(
+    message.trim(),
+  )
+}
 
 export function requestedPageWrite(message: string): PageWriteRequest | undefined {
   const text = message.trim()
@@ -164,6 +207,125 @@ async function readWrittenPage(tab: ConfluenceTab, id: string, signal?: AbortSig
   } catch {
     unverifiedWrite()
   }
+}
+
+export async function preparePageEdit(
+  request: PageEditRequest,
+  current: ConfluenceTab | undefined,
+  signal?: AbortSignal,
+) {
+  const { before, after, targetUrl } = request
+  if (!before.trim() || before.length > 2000 || after.length > 2000 || /\p{Cc}/u.test(before + after))
+    refuse('Quote a non-empty passage and a replacement of at most 2,000 characters each, on one line.')
+  if (before === after) refuse('The replacement is the same as the original text.')
+  const tab = requireTab(current)
+  const ref = requestedReference(tab, targetUrl)
+  const original = await fetchPublishedPage(tab, ref, storedPage, storedFields, signal)
+  const value = replaceStorageText(original.body.storage.value, before, after)
+  return { tab, ref, original, value, preview: describeEdit('Edit', tab, original, before, after) }
+}
+
+export async function prepareUndoPageEdit(
+  record: PageEditUndo,
+  target: ConfluenceTab | undefined,
+  signal?: AbortSignal,
+) {
+  const tab = requireTab(target)
+  const ref = record.page
+  const original = await fetchPublishedPage(tab, ref, storedPage, storedFields, signal)
+  if (original.version.number !== record.version)
+    refuse('The page has changed since the last edit. Review its version history to decide how to undo it.')
+  const previous = await getConfluence(
+    tab,
+    pageResource(tab, ref),
+    { status: 'historical', version: String(record.version - 1), expand: storedFields },
+    signal,
+  )
+  const parsed = historicalStorage.safeParse(previous.data)
+  if (
+    !parsed.success ||
+    parsed.data.version.hidden ||
+    parsed.data.version.number !== record.version - 1 ||
+    !samePageLocation(parsed.data, original)
+  )
+    refuse('Confluence did not return the matching prior version. Review the page history before undoing.')
+  const value = parsed.data.body.storage.value
+  if (replaceStorageText(value, record.before, record.after) !== original.body.storage.value)
+    refuse('The earlier version does not match the last edit. Review the page history before undoing.')
+  return {
+    tab,
+    ref,
+    original,
+    value,
+    preview: describeEdit('Undo the edit on', tab, original, record.after, record.before),
+  }
+}
+
+function describeEdit(
+  action: string,
+  tab: ConfluenceTab,
+  original: z.output<typeof storedPage>,
+  before: string,
+  after: string,
+): string {
+  const page = pageLink(tab.instance, original)
+  return (
+    `${action} "${page.title}" (${page.url}) in space ${original.space.key}, version ${original.version.number}.\n` +
+    `Before: ${JSON.stringify(before)}\nAfter: ${JSON.stringify(after)}`
+  )
+}
+
+function samePageLocation(
+  left: z.output<typeof historicalStorage> | z.output<typeof storedPage>,
+  right: z.output<typeof storedPage>,
+): boolean {
+  return (
+    left.id === right.id &&
+    left.title === right.title &&
+    left.space.key === right.space.key &&
+    left.ancestors.length === right.ancestors.length &&
+    left.ancestors.every(({ id }, index) => id === right.ancestors[index]?.id)
+  )
+}
+
+export async function applyPageEdit(plan: Awaited<ReturnType<typeof preparePageEdit>>, signal?: AbortSignal) {
+  const { tab, ref, original, value } = plan
+  const current = await fetchPublishedPage(tab, ref, storedPage, storedFields, signal)
+  if (
+    !samePageLocation(current, original) ||
+    current.version.number !== original.version.number ||
+    current.body.storage.value !== original.body.storage.value
+  )
+    refuse('The Confluence page changed after the preview. Review the current page and ask for a new preview.')
+  if (original.version.number === 2_147_483_647) refuse('This Confluence page cannot be advanced to another version.')
+
+  const next = original.version.number + 1
+  let recovered = false
+  try {
+    await updateConfluencePage(
+      tab,
+      original.id,
+      {
+        type: 'page',
+        title: original.title,
+        version: { number: next },
+        body: { storage: { value, representation: 'storage' } },
+      },
+      signal,
+    )
+  } catch (error) {
+    if (signal?.aborted || !(error instanceof Error) || !('mayHaveChanged' in error) || error.mayHaveChanged !== true)
+      throw error
+    recovered = true
+  }
+  const verified = await readWrittenPage(tab, original.id, signal)
+  if (
+    !samePageLocation(verified, original) ||
+    verified.version.number !== next ||
+    verified.body.storage.value !== value
+  )
+    unverifiedWrite()
+  return { page: pageLink(tab.instance, verified), version: next, changed: true, bodyVerified: true, recovered }
 }
 
 export async function applyPageWrite(plan: PreparedCreate | PreparedRename, signal?: AbortSignal) {
