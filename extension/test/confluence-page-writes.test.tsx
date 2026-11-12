@@ -99,11 +99,14 @@ describe('trash and restore a published page', () => {
     }
   }
 
-  it('[UC-CONFLUENCE-011-S01] previews the page and verifies recoverable trash after dispatch', async () => {
+  it('[UC-CONFLUENCE-011-S01] confirms the page and verifies recoverable trash after dispatch', async () => {
     const { browser, user } = await openPanel()
     usePage(browser)
     browser.ai.script.push({ toolCalls: [trash] }, { reply: 'Trashed and verified.' })
     await ask(user, 'Trash this page')
+    expect(await screen.findByText(/may move child pages that your account cannot see/)).toBeVisible()
+    expect(writes(browser)).toEqual([])
+    await user.click(await screen.findByRole('button', { name: /^Allow$/ }))
     expect(await screen.findByText('Trashed and verified.')).toBeVisible()
     expect(writes(browser)).toHaveLength(1)
     expect(modelResults(browser)).toContain('"status":"trashed","version":2,"changed":true')
@@ -116,6 +119,7 @@ describe('trash and restore a published page', () => {
     if (undo) {
       browser.ai.script.push({ toolCalls: [trash] }, { reply: 'Moved to trash.' })
       await ask(user, 'Trash this page')
+      await user.click(await screen.findByRole('button', { name: /^Allow$/ }))
       await answered()
       await user.click(screen.getByRole('button', { name: 'New chat' }))
       await user.click(screen.getByRole('button', { name: 'Sessions' }))
@@ -181,8 +185,7 @@ describe('trash and restore a published page', () => {
       }
       browser.ai.script.push({ toolCalls: [call] }, { reply: 'The page already has the requested state.' })
       await ask(user, message)
-      if (call === restore && message === restoreCommand)
-        await user.click(await screen.findByRole('button', { name: /^Allow$/ }))
+      if (denied) await user.click(await screen.findByRole('button', { name: /^Allow$/ }))
       await answered()
       if ((page.status === 'trashed' && call === trash) || (page.status === 'current' && message === restoreCommand)) {
         expect(modelResults(browser)).toMatch(reason)
@@ -209,7 +212,7 @@ describe('trash and restore a published page', () => {
     const call = restoring ? restore : trash
     browser.ai.script.push({ toolCalls: [call, call] })
     await ask(user, restoring ? restoreCommand : 'Trash this page')
-    if (restoring) await user.click(await screen.findByRole('button', { name: /^Allow$/ }))
+    await user.click(await screen.findByRole('button', { name: /^Allow$/ }))
     await answered()
     expect(writes(browser)).toHaveLength(1)
     expect(readsAfterWrite).toBe(1)

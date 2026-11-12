@@ -165,7 +165,8 @@ function pageStatusTool(currentQuestion: () => WorkspaceQuestion, action: PageSt
         : action === 'restore'
           ? 'Restore a trashed page specified by the user by link. Confluence restores it at the space root.'
           : 'Undo the latest verified page trash action in this conversation. Use only for an explicit undo request.',
-    needsConfirmation: action === 'restore',
+    needsConfirmation: () =>
+      action !== 'undo' && prepared?.plan.page.status !== (action === 'trash' ? 'trashed' : 'current'),
     args: z.strictObject({}),
     changesData,
     preview: async (_args, signal) => {

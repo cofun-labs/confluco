@@ -93,7 +93,7 @@ export async function preparePageStatus(
     action: request.action,
     preview:
       request.action === 'trash'
-        ? `Move ${name} to the recoverable trash. Confluence restores pages at the space root.`
+        ? `Move ${name} to the recoverable trash. Confluence restores pages at the space root and may move child pages that your account cannot see.`
         : `Restore ${name} from the trash at the space root.${undo ? '' : ' Review who can access the page there before allowing this change.'}`,
   }
 }
