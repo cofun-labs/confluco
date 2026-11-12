@@ -129,6 +129,8 @@ A production instance also needs:
 - The extension's origin (`chrome-extension://<extension id>`) in the instance's `allowed_origins`, set through Clerk's Backend API as [Clerk's Sync Host guide](https://clerk.com/docs/guides/sessions/sync-host#add-the-extensions-id-to-your-web-apps-allowedorigins) describes.
 - `CLERK_JWT_KEY` taken from that instance: the PEM form of the key at `https://clerk.<your domain>/.well-known/jwks.json`.
 
+The checked-in public key pins the hosted extension's ID. If a Chrome Web Store release uses a different ID, add its origin to both the Worker's `CLERK_AUTHORIZED_PARTIES` and Clerk's `allowed_origins` before testing sign-in.
+
 ```bash
 pnpm build        # outputs extension/dist
 ```

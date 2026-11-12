@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { parseEnv } from 'node:util'
 import { describe, expect, it } from 'vitest'
@@ -33,16 +34,24 @@ describe('extension manifest', () => {
 
   // The checked-in build config, read from the file itself so a local .env.local can't change it.
   // PRIVACY.md lists these hosts; a change here changes that table too.
-  it('allows only the hosts of the hosted Confluco in the checked-in config', () => {
+  it('pins the extension ID and allowed hosts in the hosted config', () => {
     const env = parseEnv(readFileSync(new URL('../.env', import.meta.url), 'utf8'))
     const json = buildManifest(
       {
         VITE_CLERK_PUBLISHABLE_KEY: env.VITE_CLERK_PUBLISHABLE_KEY,
         VITE_CLERK_SYNC_HOST: env.VITE_CLERK_SYNC_HOST ?? '',
         VITE_API_URL: env.VITE_API_URL,
+        CRX_PUBLIC_KEY: env.CRX_PUBLIC_KEY,
       },
       '1.2.3',
     )
+    // Chromium maps the first 16 bytes of the public key hash to letters a through p.
+    const id = createHash('sha256')
+      .update(Buffer.from(json.key ?? '', 'base64'))
+      .digest('hex')
+      .slice(0, 32)
+      .replace(/[0-9a-f]/g, (digit) => String.fromCharCode(97 + Number.parseInt(digit, 16)))
+    expect(id).toBe('fccfdaiibgaiblpkkmpfgoijmokbgfng')
     expect(json.host_permissions).toEqual([
       'https://clerk.cofun.cc/*',
       'https://confluco-api.cofun.cc/*',

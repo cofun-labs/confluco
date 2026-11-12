@@ -1,10 +1,10 @@
 /**
- * The sign-in page the extension opens in a tab. Clerk's session cookie lands on
- * this domain, and the extension picks it up through Clerk's Sync Host.
+ * The sign-in page the extension opens in a tab. Sync Host reads the Clerk
+ * client cookie from the Frontend API host in production and this host in development.
  * Social logins (Google etc.) work here because this is a normal web page.
  */
 
-/** Clerk's Frontend API host is encoded in the publishable key: pk_test_<base64("host$")>. */
+/** Both pk_live_ and pk_test_ keys end in the base64-encoded Frontend API host and a dollar sign. */
 function clerkFrontendApi(publishableKey: string): string {
   return atob(publishableKey.split('_')[2] ?? '').replace(/\$$/, '')
 }
