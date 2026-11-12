@@ -1,7 +1,20 @@
-<!-- Confluco's conversation mark. Export the manifest's PNG sizes with `pnpm icons`. -->
+<!--
+  Confluco's icon, in the Cofun family design: a white page with a docked panel on the right.
+  The page carries Confluco's pattern (a title bar and two bullet rows); the navy panel carries
+  the white Cofun mark (an open ring with a dot just outside its gap).
+  Export the manifest's PNG sizes with `pnpm icons`.
+-->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
-  <rect x="8" y="8" width="112" height="112" rx="30" fill="#1254ed" />
-  <path d="M86 38a34 34 0 1 0 0 52" fill="none" stroke="#ffffff" stroke-width="16" stroke-linecap="round" />
-  <path d="m43 85-6 19 25-11Z" fill="#ffffff" />
-  <circle cx="91" cy="64" r="9" fill="#7ce8f1" />
+  <rect x="8" y="16" width="112" height="96" rx="20" fill="#fff" />
+  <rect x="9.5" y="17.5" width="109" height="93" rx="18.5" fill="none" stroke="#b9b8b4" stroke-width="3" />
+  <path d="M72 16H100a20 20 0 0 1 20 20V92a20 20 0 0 1-20 20H72Z" fill="#0B3D91" />
+  <rect x="24" y="40" width="34" height="8" rx="4" fill="#191919" />
+  <rect x="24" y="60" width="7" height="8" rx="3.5" fill="#c8c7c3" />
+  <rect x="36" y="60" width="22" height="8" rx="4" fill="#c8c7c3" />
+  <rect x="24" y="80" width="7" height="8" rx="3.5" fill="#c8c7c3" />
+  <rect x="36" y="80" width="17" height="8" rx="4" fill="#c8c7c3" />
+  <g transform="translate(96 64)">
+    <path d="M10.9 0.4A13 13 0 1 1-0.4-10.9" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round" />
+    <circle cx="10" cy="-10" r="5" fill="#fff" />
+  </g>
 </svg>
