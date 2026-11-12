@@ -180,4 +180,75 @@ describe('organize published pages', () => {
       expect(writes(browser)).toHaveLength(uncertain ? 1 : 0)
     },
   )
+
+  it.each([
+    ['read restriction', source.body.storage.value, 'read', /drop an existing page restriction/],
+    ['update restriction', source.body.storage.value, 'update', /drop an existing page restriction/],
+    [
+      'attachment reference',
+      '<p><ri:attachment ri:filename="file.pdf" /></p>',
+      '',
+      /attachment or inline comment references/,
+    ],
+    [
+      'inline comment reference',
+      '<ac:inline-comment-marker ac:ref="test">Text</ac:inline-comment-marker>',
+      '',
+      /attachment or inline comment references/,
+    ],
+  ])('[UC-CONFLUENCE-010-S03] refuses a body copy with a source %s', async (_case, body, operation, reason) => {
+    const { browser, user } = await openPanel()
+    browser.confluenceResponse = (address) => {
+      const path = new URL(address).pathname
+      if (path.endsWith('/77')) return Response.json(parent)
+      if (path.endsWith('/child/attachment')) return Response.json(empty)
+      if (path.endsWith('/42/restriction/byOperation')) {
+        const restricted = { restrictions: { user: { results: [{}] }, group: empty } }
+        return Response.json({
+          read: operation === 'read' ? restricted : unrestricted,
+          update: operation === 'update' ? restricted : unrestricted,
+        })
+      }
+      return Response.json({ ...source, body: { storage: { ...source.body.storage, value: body } } })
+    }
+    browser.ai.script.push({ toolCalls: [copy] })
+    await ask(user, copyCommand)
+    await answered()
+    expect(screen.getAllByText(reason).length).toBeGreaterThan(0)
+    expect(writes(browser)).toEqual([])
+  })
+
+  it.each(['source changed', 'invalid create response', 'copy read-back mismatch', 'title conflict'])(
+    '[UC-CONFLUENCE-010-S04] stops a copy on %s',
+    async (outcome) => {
+      const { browser, user } = await openPanel()
+      let sourceReads = 0
+      browser.confluenceResponse = (address, init) => {
+        const path = new URL(address).pathname
+        if (path.endsWith('/77')) return Response.json(parent)
+        if (path.endsWith('/restriction/byOperation'))
+          return Response.json({ read: unrestricted, update: unrestricted })
+        if (path.endsWith('/child/attachment')) return Response.json(empty)
+        if (init?.method === 'POST')
+          return Response.json(outcome === 'invalid create response' ? { title: copied.title } : copied)
+        if (path === api) return Response.json(outcome === 'title conflict' ? { results: [copied] } : empty)
+        if (path.endsWith('/99')) return Response.json({ ...copied, ancestors: [] })
+        sourceReads++
+        return Response.json(
+          outcome === 'source changed' && sourceReads > 1 ? { ...source, version: { number: 3 } } : source,
+        )
+      }
+      browser.ai.script.push({ toolCalls: [copy, copy] })
+      await ask(user, copyCommand)
+      await answered()
+      const reason =
+        outcome === 'source changed'
+          ? /changed after the preview/
+          : outcome === 'title conflict'
+            ? /title already exists/
+            : /could not be verified/
+      expect(screen.getAllByText(reason).length).toBeGreaterThan(0)
+      expect(writes(browser)).toHaveLength(outcome === 'source changed' || outcome === 'title conflict' ? 0 : 1)
+    },
+  )
 })

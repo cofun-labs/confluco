@@ -79,7 +79,7 @@ async function requireCompatibleAccess(
     const response = await getConfluence(tab, `content/${id}/restriction/byOperation`, {}, signal)
     const parsed = restrictions.safeParse(response.data)
     if (!parsed.success)
-      refuse('Confluence did not report the source page restrictions. Check access before trying again.')
+      refuse('Confluence did not report restrictions on the source or an ancestor. Check access before trying again.')
     if (restricted(parsed.data.read) || (id === source.id && restricted(parsed.data.update)))
       refuse('This destination could drop an existing page restriction. Choose a destination with the same access.')
   }
@@ -140,7 +140,7 @@ export async function applyOrganization(plan: Awaited<ReturnType<typeof prepareO
   if (request.action === 'copy') {
     await requireBodyOnlyCopy(tab, current, signal)
     const existing = await findTitleInSpace(tab, request.title, destination.space.key, signal)
-    if (existing) return { page: pageLink(tab.instance, existing), changed: false, alreadyExists: true }
+    if (existing) refuse('A page with that title already exists in the destination space. Choose a different title.')
     const response = await createConfluencePage(
       tab,
       { type: 'page', title: request.title, space: destination.space, ancestors, body: source.body },
