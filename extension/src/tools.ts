@@ -1,4 +1,11 @@
 import {
+  applyAttachmentUpload,
+  attachmentsArgs,
+  listPageAttachments,
+  prepareAttachmentUpload,
+  type AttachmentUpload,
+} from './confluence/attachments'
+import {
   applyComment,
   commentsArgs,
   listPageComments,
@@ -44,6 +51,7 @@ export interface WorkspaceQuestion {
   organization?: OrganizationRequest
   comment?: CommentRequest
   pageStatus?: PageStatusRequest
+  attachmentUpload?: AttachmentUpload
   undoRequested?: boolean
   undo?: WorkspaceUndo
   beforeWrite?: () => Promise<void>
@@ -310,6 +318,38 @@ function organizationTool(currentQuestion: () => WorkspaceQuestion, action: Orga
   })
 }
 
+function attachmentUploadTool(currentQuestion: () => WorkspaceQuestion) {
+  let prepared: { question: WorkspaceQuestion; plan: Awaited<ReturnType<typeof prepareAttachmentUpload>> } | undefined
+  return defineTool({
+    name: 'upload_page_attachment',
+    description:
+      'Upload or replace a local file when the user has selected it and clicked the attachment action in the panel.',
+    args: z.strictObject({}),
+    needsConfirmation: true,
+    changesData: true,
+    preview: async (_args, signal) => {
+      prepared = undefined
+      const question = currentQuestion()
+      const upload = question.attachmentUpload
+      if (!upload) refuse('Choose a local file and select Upload attachment or Replace attachment in the panel.')
+      question.attachmentUpload = undefined
+      const plan = await prepareAttachmentUpload(upload, await question.tab, signal)
+      signal?.throwIfAborted()
+      if (currentQuestion() !== question) return undefined
+      prepared = { question, plan }
+      return plan.preview
+    },
+    run: async (_args, signal) => {
+      signal?.throwIfAborted()
+      const question = currentQuestion()
+      const ready = prepared
+      prepared = undefined
+      if (ready?.question !== question) refuse('Choose the file again to preview the attachment.')
+      return applyWorkspaceChange(question, signal, () => applyAttachmentUpload(ready.plan, signal))
+    },
+  })
+}
+
 export function createTools(currentQuestion: () => WorkspaceQuestion) {
   const currentTab = () => currentQuestion().tab
   return [
@@ -403,5 +443,13 @@ export function createTools(currentQuestion: () => WorkspaceQuestion) {
     commentTool(currentQuestion),
     organizationTool(currentQuestion, 'move'),
     organizationTool(currentQuestion, 'copy'),
+    defineTool({
+      name: 'list_page_attachments',
+      description:
+        'List attachments and download links on a published page. Use the filename filter for an exact match.',
+      args: attachmentsArgs,
+      run: async (args, signal) => listPageAttachments(args, await currentTab(), signal),
+    }),
+    attachmentUploadTool(currentQuestion),
   ]
 }

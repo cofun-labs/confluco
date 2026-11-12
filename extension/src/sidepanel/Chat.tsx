@@ -2,6 +2,7 @@ import { useAuth } from '@clerk/chrome-extension'
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { flushSync } from 'react-dom'
 import { CopilotAgent, MAY_HAVE_CHANGED, type AgentUpdate, type ConfirmTool, type HistoryMessage } from '../agent'
+import type { AttachmentUpload } from '../confluence/attachments'
 import { requestedComment } from '../confluence/comments'
 import { getInstance } from '../confluence/instance'
 import { requestedLabelChanges } from '../confluence/labels'
@@ -9,7 +10,7 @@ import { requestedOrganization } from '../confluence/page-organization'
 import { requestedPageStatus } from '../confluence/page-status'
 import { requestedPageEdit, requestedPageWrite, requestedUndo } from '../confluence/page-writes'
 import { activeTab, openPageNote, tabPage } from '../confluence/tab'
-import { confluenceTab } from '../confluence/transport'
+import { attachmentSizeLimit, confluenceTab } from '../confluence/transport'
 import { SessionStore, titleFor, type Session } from '../sessions'
 import { createTools, workspaceUndo, type WorkspaceQuestion, type WorkspaceUndo } from '../tools'
 import { ConfluenceConnection } from './ConfluenceConnection'
@@ -36,6 +37,7 @@ const SYSTEM_PROMPT =
   'Use list_page_comments to read discussions. For a direct request Add comment "TEXT" on this page or Reply to comment ID with "TEXT" on this page, use add_page_comment. ' +
   'Use trash_page for an explicit request to move a page to recoverable trash, and restore_page for a direct request to restore a page by link. ' +
   'For an explicit undo of the last operation, use undo_last_change. The saved change determines what can be undone. If a page was restored at the space root, tell the user. ' +
+  'Use list_page_attachments for attachment names and downloads. The tool card displays the download links. Use upload_page_attachment when the user clicks Upload attachment or Replace attachment for a selected local file. ' +
   'For a target other than the current page, ask the user to include its canonical Confluence page link. ' +
   'Published page text can be read and discussed. Be concise.'
 
@@ -79,6 +81,8 @@ export function Chat({ userId }: { userId: string }) {
   const [store] = useState(() => new SessionStore(userId))
   const [messages, setMessages] = useState<Shown[]>([])
   const [input, setInput] = useState('')
+  const [attachmentFile, setAttachmentFile] = useState<File>()
+  const attachmentInput = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   // Stop was pressed; the question is still winding down, so nothing is pending any more.
   const [stopping, setStopping] = useState(false)
@@ -120,8 +124,10 @@ export function Chat({ userId }: { userId: string }) {
   // The panel unmounts on sign-out; don't leave a question running tools in the background.
   useEffect(() => () => agentRef.current?.stop(), [])
 
-  async function send() {
-    const text = input.trim()
+  async function send(attachmentUpload?: AttachmentUpload) {
+    const text = attachmentUpload
+      ? `I selected a local file and clicked ${attachmentUpload.mode === 'create' ? 'Upload' : 'Replace'} attachment. Use upload_page_attachment to preview the selected file on this page.`
+      : input.trim()
     if (!text || busy) return
 
     const id = chatId.current
@@ -140,6 +146,7 @@ export function Chat({ userId }: { userId: string }) {
       organization: requestedOrganization(text),
       comment: requestedComment(text),
       pageStatus: requestedPageStatus(text),
+      attachmentUpload,
       undoRequested: requestedUndo(text),
       undo: current?.undo,
       beforeWrite: async () => {
@@ -153,7 +160,7 @@ export function Chat({ userId }: { userId: string }) {
     }
     workspaceQuestion.current = question
     if (!current) setCurrent(session)
-    setInput('')
+    if (!attachmentUpload) setInput('')
     setBusy(true)
     setStopping(false)
     // Where this question's reply goes in the list.
@@ -257,7 +264,9 @@ export function Chat({ userId }: { userId: string }) {
         // The agent can dispatch the write as soon as this callback returns.
         if (u.preview) flushSync(showReadyTool)
         else showReadyTool()
-      } else
+      } else {
+        if (u.name === 'upload_page_attachment' && u.status === 'done' && attachmentUpload && chatId.current === id)
+          setAttachmentFile((file) => (file === attachmentUpload.file ? undefined : file))
         updateReply((m) => {
           const j = newestOpenCall(m.parts, u.id)
           if (j < 0) return m
@@ -266,6 +275,7 @@ export function Chat({ userId }: { userId: string }) {
           parts[j] = { ...part, tool: { ...part.tool, status: u.status, result: u.result } }
           return { ...m, parts }
         })
+      }
     }
 
     const before = agent.history().length
@@ -280,6 +290,7 @@ export function Chat({ userId }: { userId: string }) {
       else if (result.status === 'step_limit')
         updateReply((m) => ({ ...m, note: `Stopped after ${result.steps} steps. Ask again to continue.` }))
     } finally {
+      question.attachmentUpload = undefined
       // A question can end without the panel answering, e.g. on unmount.
       // Only this question's own answers: after a New chat, the next question may reuse an id.
       for (const [callId, answer] of asked) if (pending.current.get(callId) === answer) pending.current.delete(callId)
@@ -341,6 +352,7 @@ export function Chat({ userId }: { userId: string }) {
     void agent.reset(session?.messages)
     setBusy(false)
     setStopping(false)
+    setAttachmentFile(undefined)
     setMessages(session ? toShown(session.messages) : [])
     setCurrent(
       session && {
@@ -483,6 +495,50 @@ export function Chat({ userId }: { userId: string }) {
         )}
       </main>
 
+      <div className="attachment-picker" hidden={view !== 'chat'}>
+        <input
+          ref={attachmentInput}
+          type="file"
+          aria-label="Attachment file"
+          hidden
+          onChange={(event) => {
+            setAttachmentFile(event.currentTarget.files?.[0])
+            event.currentTarget.value = ''
+          }}
+        />
+        {attachmentFile ? (
+          <>
+            <span className="attachment-name">{attachmentFile.name}</span>
+            {attachmentFile.size > attachmentSizeLimit ? (
+              <span role="status">Choose an attachment of at most 10 MiB.</span>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void send({ file: attachmentFile, mode: 'create' })}
+                >
+                  Upload attachment
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void send({ file: attachmentFile, mode: 'replace' })}
+                >
+                  Replace attachment
+                </button>
+              </>
+            )}
+            <button type="button" onClick={() => setAttachmentFile(undefined)}>
+              Remove file
+            </button>
+          </>
+        ) : (
+          <button type="button" disabled={busy} onClick={() => attachmentInput.current?.click()}>
+            Choose attachment
+          </button>
+        )}
+      </div>
       <form id="composer" onSubmit={onSubmit} hidden={view !== 'chat'}>
         <textarea
           rows={3}
