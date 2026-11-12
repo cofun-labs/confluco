@@ -18,4 +18,4 @@ A user can select text in a connected self-managed Confluence editor and attach 
 
 | ID | Priority | Status | Scenario |
 | --- | --- | --- | --- |
-| UC-CONFLUENCE-013-S04 | P0 | 🚧 | Given a disposable Confluence page in the editor; when the user selects one of two synthetic phrases and attaches it to a question; then the assistant can use the selected phrase while leaving the editor intact. |
+| UC-CONFLUENCE-013-S04 | P0 | ✅ | Given a disposable Confluence page in the editor; when the user selects one of two synthetic phrases and attaches it to a question; then the assistant can use the selected phrase while leaving the editor intact. |
