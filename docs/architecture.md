@@ -54,6 +54,8 @@ Trash and restore use the page ID chosen in the user's request. The tool preview
 
 The saved conversation keeps a local undo record for its latest verified text edit or trash action. Before another workspace write starts, the panel clears the saved record so it cannot become stale if the conversation closes during the write. One undo tool selects the reversal from that record. It reconstructs the original text edit from earlier storage or uses the saved page reference to restore it from the trash. Trash undo also compares the time Confluence reports for the trash action. If the instance did not provide a time, undo requires the same access review as a restore by link.
 
+Discussions return bounded comment batches with stable links and parent comment IDs. A direct post binds its page, optional parent and quoted text before the model calls the tool. The tool previews the destination and text, rechecks the parent and reads the posted comment back. Only footer comments and replies to verified footer comments can be written.
+
 ## Layout
 
 ```
@@ -79,6 +81,7 @@ extension/                Chrome extension
   src/confluence/labels.ts  paginated labels and requested mutations
   src/confluence/page-writes.ts  authorized creation, rename and text edits with read-back
   src/confluence/storage-edit.ts  exact text replacement in original page storage
+  src/confluence/comments.ts  paginated discussion reads and verified footer posts
   src/sidepanel/          React UI (main.tsx: sign-in, Chat.tsx: chat, Sessions.tsx: saved sessions,
                           ToolCall.tsx: one tool call and its changes)
   test/                   tests of client code and the whole panel in jsdom

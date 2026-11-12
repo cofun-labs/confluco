@@ -1,3 +1,10 @@
+import {
+  applyComment,
+  commentsArgs,
+  listPageComments,
+  prepareComment,
+  type CommentRequest,
+} from './confluence/comments'
 import { accessArgs, listVersions, pageAccess, readPageVersion, versionArgs, versionsArgs } from './confluence/history'
 import { applyLabel, changeLabelArgs, labelsArgs, listLabels, type LabelRequest } from './confluence/labels'
 import {
@@ -33,6 +40,7 @@ export interface WorkspaceQuestion {
   labelChanges: LabelRequest[]
   pageWrite?: PageWriteRequest
   pageEdit?: PageEditRequest
+  comment?: CommentRequest
   pageStatus?: PageStatusRequest
   undoRequested?: boolean
   undo?: WorkspaceUndo
@@ -98,6 +106,38 @@ function pageEditTool(currentQuestion: () => WorkspaceQuestion) {
         after: ready.edit.after,
       }
       return result
+    },
+  })
+}
+
+function commentTool(currentQuestion: () => WorkspaceQuestion) {
+  let prepared: { question: WorkspaceQuestion; plan: Awaited<ReturnType<typeof prepareComment>> } | undefined
+  return defineTool({
+    name: 'add_page_comment',
+    description:
+      'Add a footer comment or reply from a direct user request. The page, optional parent comment ID, and exact quoted text come from the user message.',
+    args: z.strictObject({}),
+    changesData: true,
+    preview: async (_args, signal) => {
+      prepared = undefined
+      const question = currentQuestion()
+      const request = question.comment
+      if (!request)
+        refuse('Ask the user to say Add comment "TEXT" on this page or Reply to comment ID with "TEXT" on this page.')
+      question.comment = undefined
+      const plan = await prepareComment(request, await question.tab, signal)
+      signal?.throwIfAborted()
+      if (currentQuestion() !== question) return undefined
+      prepared = { question, plan }
+      return plan.preview
+    },
+    run: async (_args, signal) => {
+      signal?.throwIfAborted()
+      const question = currentQuestion()
+      const ready = prepared
+      prepared = undefined
+      if (ready?.question !== question) refuse('Ask again to preview the intended comment.')
+      return applyWorkspaceChange(question, signal, () => applyComment(ready.plan, signal))
     },
   })
 }
@@ -315,5 +355,13 @@ export function createTools(currentQuestion: () => WorkspaceQuestion) {
     undoWorkspaceTool(currentQuestion),
     pageStatusTool(currentQuestion, 'trash'),
     pageStatusTool(currentQuestion, 'restore'),
+    defineTool({
+      name: 'list_page_comments',
+      description:
+        'Read a bounded batch of comments and replies on a published page, with links and parent comment IDs.',
+      args: commentsArgs,
+      run: async (args, signal) => listPageComments(args, await currentTab(), signal),
+    }),
+    commentTool(currentQuestion),
   ]
 }

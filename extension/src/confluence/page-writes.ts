@@ -10,7 +10,7 @@ import {
 } from './references'
 import { replaceStorageText } from './storage-edit'
 import {
-  createConfluencePage,
+  createConfluenceContent,
   getConfluence,
   refuse,
   requireTab,
@@ -337,7 +337,7 @@ export async function applyPageWrite(plan: PreparedCreate | PreparedRename, sign
     if (parent.id !== target.id || parent.space.key !== target.space.key)
       refuse('The chosen parent changed. Ask again on the intended page.')
     const value = plainTextStorage(plan.request.text)
-    const response = await createConfluencePage(
+    const response = await createConfluenceContent(
       tab,
       {
         type: 'page',

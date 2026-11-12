@@ -2,6 +2,7 @@ import { useAuth } from '@clerk/chrome-extension'
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { flushSync } from 'react-dom'
 import { CopilotAgent, MAY_HAVE_CHANGED, type AgentUpdate, type ConfirmTool, type HistoryMessage } from '../agent'
+import { requestedComment } from '../confluence/comments'
 import { getInstance } from '../confluence/instance'
 import { requestedLabelChanges } from '../confluence/labels'
 import { requestedPageStatus } from '../confluence/page-status'
@@ -30,6 +31,7 @@ const SYSTEM_PROMPT =
   'You can inspect page history, access and labels. Use change_page_label only for a label change the user requests. ' +
   'Use create_page or rename_page only for a direct user request. Pass the exact quoted new title. For creation, the user must explicitly choose a parent. ' +
   'Use edit_page only for a direct text replacement request, for example Replace "OLD" with "NEW" on this page. It uses the quoted text from the request. ' +
+  'Use list_page_comments to read discussions. For a direct request Add comment "TEXT" on this page or Reply to comment ID with "TEXT" on this page, use add_page_comment. ' +
   'Use trash_page for an explicit request to move a page to recoverable trash, and restore_page for a direct request to restore a page by link. ' +
   'For an explicit undo of the last operation, use undo_last_change. The saved change determines what can be undone. If a page was restored at the space root, tell the user. ' +
   'For a target other than the current page, ask the user to include its canonical Confluence page link. ' +
@@ -133,6 +135,7 @@ export function Chat({ userId }: { userId: string }) {
       labelChanges: requestedLabelChanges(text),
       pageWrite: requestedPageWrite(text),
       pageEdit: requestedPageEdit(text),
+      comment: requestedComment(text),
       pageStatus: requestedPageStatus(text),
       undoRequested: requestedUndo(text),
       undo: current?.undo,
