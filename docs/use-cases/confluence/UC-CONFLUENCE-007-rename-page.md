@@ -18,4 +18,4 @@ On a connected instance, the user can request a new title for a published page. 
 
 | ID | Priority | Status | Scenario |
 | --- | --- | --- | --- |
-| UC-CONFLUENCE-007-S04 | P0 | 🚧 | Given a disposable published page on a real self-managed instance; when the user requests a rename; then the same page has the new title and still has its original content and parent. |
+| UC-CONFLUENCE-007-S04 | P0 | ✅ | Given a disposable published page on a real self-managed instance; when the user requests a rename; then the same page has the new title and still has its original content and parent. |
