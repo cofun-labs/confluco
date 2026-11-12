@@ -4,17 +4,12 @@ import { flushSync } from 'react-dom'
 import { CopilotAgent, MAY_HAVE_CHANGED, type AgentUpdate, type ConfirmTool, type HistoryMessage } from '../agent'
 import { getInstance } from '../confluence/instance'
 import { requestedLabelChanges } from '../confluence/labels'
-import {
-  pageEditUndo,
-  requestedPageEdit,
-  requestedPageWrite,
-  requestedUndo,
-  type PageEditUndo,
-} from '../confluence/page-writes'
+import { requestedPageStatus } from '../confluence/page-status'
+import { requestedPageEdit, requestedPageWrite, requestedUndo } from '../confluence/page-writes'
 import { activeTab, openPageNote, tabPage } from '../confluence/tab'
 import { confluenceTab } from '../confluence/transport'
 import { SessionStore, titleFor, type Session } from '../sessions'
-import { createTools, type WorkspaceQuestion } from '../tools'
+import { createTools, workspaceUndo, type WorkspaceQuestion, type WorkspaceUndo } from '../tools'
 import { ConfluenceConnection } from './ConfluenceConnection'
 import { Sessions } from './Sessions'
 import { ToolCall, type ShownTool } from './ToolCall'
@@ -35,7 +30,8 @@ const SYSTEM_PROMPT =
   'You can inspect page history, access and labels. Use change_page_label only for a label change the user requests. ' +
   'Use create_page or rename_page only for a direct user request. Pass the exact quoted new title. For creation, the user must explicitly choose a parent. ' +
   'Use edit_page only for a direct text replacement request, for example Replace "OLD" with "NEW" on this page. It uses the quoted text from the request. ' +
-  'For an explicit request to undo the last operation, use undo_page_edit. The tool checks the saved change and the current page. ' +
+  'Use trash_page for an explicit request to move a page to recoverable trash, and restore_page for a direct request to restore a page by link. ' +
+  'For an explicit undo of the last operation, use undo_last_change. The saved change determines what can be undone. If a page was restored at the space root, tell the user. ' +
   'For a target other than the current page, ask the user to include its canonical Confluence page link. ' +
   'Published page text can be read and discussed. Be concise.'
 
@@ -70,7 +66,7 @@ interface Current {
   page: Promise<Session['page']>
   /** As this panel loaded or last saved it; not set until the first save. */
   updatedAt?: number
-  undo?: PageEditUndo
+  undo?: WorkspaceUndo
 }
 
 /** The chat of one signed-in user; mount a new one for another user. */
@@ -137,6 +133,7 @@ export function Chat({ userId }: { userId: string }) {
       labelChanges: requestedLabelChanges(text),
       pageWrite: requestedPageWrite(text),
       pageEdit: requestedPageEdit(text),
+      pageStatus: requestedPageStatus(text),
       undoRequested: requestedUndo(text),
       undo: current?.undo,
       beforeWrite: async () => {
@@ -301,7 +298,7 @@ export function Chat({ userId }: { userId: string }) {
    * Saves the session after a question; `chat` is the `chatId` it was open under and `reply` the
    * place of the question's reply in the list. Never rejects.
    */
-  async function save(session: Current, messages: HistoryMessage[], chat: number, reply: number, undo?: PageEditUndo) {
+  async function save(session: Current, messages: HistoryMessage[], chat: number, reply: number, undo?: WorkspaceUndo) {
     try {
       const page = await session.page
       const { id, createdAt, updatedAt: loaded } = session
@@ -345,7 +342,7 @@ export function Chat({ userId }: { userId: string }) {
         createdAt: session.createdAt,
         page: Promise.resolve(session.page),
         updatedAt: session.updatedAt,
-        undo: pageEditUndo.safeParse(session.undo).data,
+        undo: workspaceUndo.safeParse(session.undo).data,
       },
     )
     setView('chat')

@@ -32,9 +32,19 @@ const pageVersion = versionedPage.extend({
 })
 const operation = z.object({ operation: z.string().min(1).max(80), targetType: z.string().max(80).optional() })
 const pageWithOperations = publishedPage.extend({ operations: z.array(operation).max(100).optional() })
-const restrictionList = z.object({ results: z.array(z.unknown()) })
+const restrictionList = z.object({
+  results: z.array(z.unknown()),
+  size: z.int().nonnegative().optional(),
+  _links: z.object({ next: z.string().optional() }).optional(),
+})
 const restriction = z.object({ restrictions: z.object({ user: restrictionList, group: restrictionList }) })
-const restrictions = z.object({ read: restriction, update: restriction })
+export const restrictions = z.object({ read: restriction, update: restriction })
+
+export function hasRestriction({ restrictions }: z.output<typeof restriction>): boolean {
+  return [restrictions.user, restrictions.group].some(
+    ({ results, size, _links }) => results.length > 0 || (size ?? 0) > 0 || Boolean(_links?.next),
+  )
+}
 
 function visibleVersion(value: z.output<typeof version>) {
   return {
@@ -131,8 +141,6 @@ export async function pageAccess(
     const parsed = restrictions.safeParse(response.data)
     if (!parsed.success)
       return { ...summary, restrictions: null, notice: 'Page restrictions were unavailable in the response.' }
-    const hasRestriction = ({ restrictions }: z.output<typeof restriction>) =>
-      restrictions.user.results.length > 0 || restrictions.group.results.length > 0
     return {
       ...summary,
       restrictions: { read: hasRestriction(parsed.data.read), update: hasRestriction(parsed.data.update) },
