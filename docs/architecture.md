@@ -9,7 +9,7 @@ Chrome
   Sign-in tab → Clerk Sync Host → side panel session
 ```
 
-The agent loop runs in the side panel. The Worker verifies the user and passes the conversation to the model. Each question includes the current supported Confluence page's title and canonical URL, read from Chrome's tab metadata. Workspace tools can read, search and navigate an explicitly connected self-managed instance, inspect version history and access, and change a published page's labels at the user's request.
+The agent loop runs in the side panel. The Worker verifies the user and passes the conversation to the model. Each question includes the current supported Confluence page's title and canonical URL, read from Chrome's tab metadata. Workspace tools can read, search and navigate an explicitly connected self-managed instance, inspect version history and access, manage labels, and create or rename published pages at the user's request.
 
 ## Tech choices
 
@@ -46,6 +46,8 @@ Tools register in `extension/src/tools.ts`. A tool's arguments, validation and J
 
 The version list uses the experimental version endpoint on Confluence 8.5 when available. The current version and direct historical reads use the supported content endpoint. Access metadata is advisory. Before sending a question to the model, the panel records directly requested label changes from the user's message. The tool can apply those changes on the current published page in the requested order. It rechecks the page before writing and reads the labels back before reporting success. An uncertain write stops the question and asks the user to check the page.
 
+For page creation and rename, the panel takes the exact title, chosen target and any creation text from the user's message. The tool resolves the target and prepares a preview before executing that request. Creation checks for the title in the chosen space first. Rename submits the next published version with the original storage body. Both read the page back before reporting success.
+
 ## Layout
 
 ```
@@ -68,7 +70,8 @@ extension/                Chrome extension
   src/confluence/read-page.ts  current published-page read
   src/confluence/navigation.ts  search, space browsing and page hierarchy
   src/confluence/history.ts  published versions and reported page access
-  src/confluence/labels.ts  paginated labels and confirmed mutations
+  src/confluence/labels.ts  paginated labels and requested mutations
+  src/confluence/page-writes.ts  authorized page creation and versioned rename with read-back
   src/sidepanel/          React UI (main.tsx: sign-in, Chat.tsx: chat, Sessions.tsx: saved sessions,
                           ToolCall.tsx: one tool call and its changes)
   test/                   tests of client code and the whole panel in jsdom

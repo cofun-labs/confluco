@@ -19,6 +19,7 @@
 | Read a page | Ask about the published page on a connected self-managed Confluence 8.5 instance. |
 | Search and browse | Find published pages by title or text and explore spaces, homepages, ancestors and children on the connected instance. |
 | History and labels | Inspect older page versions and available operations. View labels or ask to add or remove a named label on the current page. |
+| Create and rename pages | Publish a child page with optional plain text or rename a published page on the connected instance. |
 | Stay in context | Each question includes the current supported Confluence page's title and URL. |
 | Draft | Work with text you provide in the conversation. |
 | Keep sessions | Save conversations locally, search by title, filter by starting page, and continue earlier chats. |
@@ -34,6 +35,7 @@ Editing and comments are planned. Confluence Cloud pages currently provide title
 4. To read a self-managed page, select **Connect Confluence**, enter the site base URL including any context path, and grant Chrome site access. Open a published page while signed in to Confluence.
 5. Ask something, such as _Which page am I on?_ or _Draft an agenda for a product review_. Paste the text you want to revise into the chat.
 6. To change a label, open the intended published page and ask _Add label release-ready_ or _Remove label release-ready_.
+7. To create a page, open its parent and ask `Create page "Release checklist" under this page with text "Verify the build."`. To rename a page, open it and ask `Rename this page to "Launch checklist"`. Use the page's canonical link ending in `/pages/viewpage.action?pageId=…` in place of `this page` to choose a different page on the same instance.
 
 ## How it works
 
