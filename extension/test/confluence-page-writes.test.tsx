@@ -128,6 +128,7 @@ describe('trash and restore a published page', () => {
       await user.click(screen.getByRole('button', { name: 'New chat' }))
       await user.click(screen.getByRole('button', { name: 'Sessions' }))
       await user.click(await screen.findByRole('button', { name: /Trash this page/ }))
+      await screen.findByRole('textbox', { name: 'Message' })
     }
     browser.ai.script.push({ toolCalls: [undo ? undoTrash : restore] }, { reply: 'The same page is published again.' })
     await ask(user, undo ? '撤销上次操作' : restoreCommand)

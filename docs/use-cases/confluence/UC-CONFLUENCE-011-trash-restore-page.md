@@ -19,4 +19,4 @@ A user can move an eligible published page to recoverable trash and restore a tr
 
 | ID | Priority | Status | Scenario |
 | --- | --- | --- | --- |
-| UC-CONFLUENCE-011-S05 | P0 | 🚧 | Given a real disposable published page; when the user moves it to the trash and undoes the action; then Confluco verifies both states and the same page is available again. |
+| UC-CONFLUENCE-011-S05 | P0 | ✅ | Given a real disposable published page; when the user moves it to the trash and undoes the action; then Confluco verifies both states and the same page is available again. |

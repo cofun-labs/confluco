@@ -160,7 +160,6 @@ export class CopilotAgent {
   private agent?: Agent
   private model?: Model<'openai-completions'>
   private readonly maxSteps: number
-  /** Names of the tools that need the user's OK before each run. */
   private readonly tools: Map<string, ToolSpec>
   /** Bumped by stop() and reset(), so a question still waiting to start knows it was cancelled. */
   private epoch = 0
