@@ -19,7 +19,7 @@ export const START = new Date('2026-11-08T12:00:00Z')
 const globals = globalThis as Record<string, unknown>
 const realFetch = globalThis.fetch
 export const PAGE_URL = 'https://team.atlassian.net/wiki/spaces/ENG/pages/123/Fixture+page?tracking=local'
-type TestTab = { id?: number; title?: string; url?: string; meta?: string }
+type TestTab = { id?: number; title?: string; url?: string; meta?: string; editorSelection?: string }
 type Injection = { target: { tabId: number }; func: (...args: never[]) => unknown; args: unknown[] }
 // jsdom lays nothing out, so it has no scrolling; the panel scrolls its messages to the newest one.
 Element.prototype.scrollTo ??= () => {}
@@ -69,9 +69,26 @@ export class FakeBrowser {
     if (!tab?.url) throw new Error('No such tab')
     const world = this.worlds.get(target.tabId) ?? {}
     this.worlds.set(target.tabId, world)
+    const page = new DOMParser().parseFromString(tab.meta ?? '', 'text/html')
+    const editorFrame = page.querySelector('iframe#wysiwygTextarea_ifr')
+    if (editorFrame && tab.editorSelection !== undefined) {
+      const editor = page.implementation.createHTMLDocument()
+      editor.body.setAttribute('contenteditable', 'true')
+      const selected = editor.createTextNode(tab.editorSelection)
+      editor.body.append(selected, editor.createTextNode('Other editor text'))
+      Object.defineProperty(editorFrame, 'contentDocument', { value: editor })
+      Object.defineProperty(editor, 'getSelection', {
+        value: () => ({
+          anchorNode: selected,
+          focusNode: selected,
+          isCollapsed: selected.length === 0,
+          toString: () => selected.data,
+        }),
+      })
+    }
     Object.assign(world, {
       location: new URL(tab.url),
-      document: new DOMParser().parseFromString(tab.meta ?? '', 'text/html'),
+      document: page,
       URL,
       URLSearchParams,
       AbortSignal,

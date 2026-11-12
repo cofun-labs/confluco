@@ -103,6 +103,18 @@ textarea {
   padding: 6px 8px;
 }
 
+.editor-selection {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.editor-selection pre {
+  max-height: 96px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 #messages {
   flex: 1;
   overflow-y: auto;
