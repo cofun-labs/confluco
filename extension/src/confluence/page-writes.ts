@@ -18,7 +18,7 @@ import {
   type ConfluenceTab,
 } from './transport'
 
-const title = z
+export const title = z
   .string()
   .trim()
   .min(1)
@@ -27,11 +27,11 @@ const title = z
 export const pageTitleArgs = z.strictObject({ title: title.describe('The exact new title from the user request.') })
 const pageLocation = publishedPage.extend({ space: z.object({ key: z.string().min(1).max(255) }) })
 const pageVersion = pageLocation.extend({ version: z.object({ number: z.int().min(1).max(2_147_483_647) }) })
-const storedPage = pageVersion.extend({
+export const storedPage = pageVersion.extend({
   ancestors: z.array(z.object({ id: pageReference.shape.id })),
   body: z.object({ storage: z.object({ value: z.string(), representation: z.literal('storage') }) }),
 })
-const storedFields = 'space,ancestors,version,body.storage'
+export const storedFields = 'space,ancestors,version,body.storage'
 const historicalStorage = storedPage.extend({
   status: z.literal('historical'),
   version: pageVersion.shape.version.extend({ hidden: z.boolean().optional() }),
@@ -170,13 +170,13 @@ function plainTextStorage(text: string): string {
     .join('')
 }
 
-async function duplicatePage(plan: PreparedCreate, signal?: AbortSignal) {
+export async function findTitleInSpace(tab: ConfluenceTab, title: string, spaceKey: string, signal?: AbortSignal) {
   const response = await getConfluence(
-    plan.tab,
+    tab,
     'content',
     {
-      spaceKey: plan.target.space.key,
-      title: plan.request.title,
+      spaceKey,
+      title,
       type: 'page',
       status: 'current',
       expand: 'space',
@@ -187,20 +187,17 @@ async function duplicatePage(plan: PreparedCreate, signal?: AbortSignal) {
   const parsed = z.object({ results: z.array(pageLocation).max(2) }).safeParse(response.data)
   if (
     !parsed.success ||
-    parsed.data.results.some(
-      (item) =>
-        item.space.key !== plan.target.space.key || item.title.toLowerCase() !== plan.request.title.toLowerCase(),
-    )
+    parsed.data.results.some((item) => item.space.key !== spaceKey || item.title.toLowerCase() !== title.toLowerCase())
   )
     refuse('Confluence did not return the expected duplicate-title check.')
   return parsed.data.results[0]
 }
 
-function unverifiedWrite(): never {
+export function unverifiedWrite(): never {
   refuse('Confluence may have applied the change, but the resulting page could not be verified.', true)
 }
 
-async function readWrittenPage(tab: ConfluenceTab, id: string, signal?: AbortSignal) {
+export async function readWrittenPage(tab: ConfluenceTab, id: string, signal?: AbortSignal) {
   try {
     const ref = { instance: tab.instance.origin + tab.instance.path, id }
     return await fetchPublishedPage(tab, ref, storedPage, storedFields, signal)
@@ -275,10 +272,9 @@ function describeEdit(
   )
 }
 
-function samePageLocation(
-  left: z.output<typeof historicalStorage> | z.output<typeof storedPage>,
-  right: z.output<typeof storedPage>,
-): boolean {
+type PageLocation = Pick<z.output<typeof storedPage>, 'id' | 'title' | 'space' | 'ancestors'>
+
+export function samePageLocation(left: PageLocation, right: PageLocation): boolean {
   return (
     left.id === right.id &&
     left.title === right.title &&
@@ -331,7 +327,7 @@ export async function applyPageEdit(plan: Awaited<ReturnType<typeof preparePageE
 export async function applyPageWrite(plan: PreparedCreate | PreparedRename, signal?: AbortSignal) {
   const { tab, ref, request, target } = plan
   if (plan.action === 'create') {
-    const duplicate = await duplicatePage(plan, signal)
+    const duplicate = await findTitleInSpace(tab, request.title, target.space.key, signal)
     if (duplicate) return { page: pageLink(tab.instance, duplicate), changed: false, alreadyExists: true }
     const parent = await fetchPublishedPage(tab, ref, pageLocation, 'space', signal)
     if (parent.id !== target.id || parent.space.key !== target.space.key)

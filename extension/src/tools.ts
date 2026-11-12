@@ -17,6 +17,7 @@ import {
   spaceArgs,
   treeArgs,
 } from './confluence/navigation'
+import { applyOrganization, prepareOrganization, type OrganizationRequest } from './confluence/page-organization'
 import {
   applyPageEdit,
   applyPageWrite,
@@ -40,6 +41,7 @@ export interface WorkspaceQuestion {
   labelChanges: LabelRequest[]
   pageWrite?: PageWriteRequest
   pageEdit?: PageEditRequest
+  organization?: OrganizationRequest
   comment?: CommentRequest
   pageStatus?: PageStatusRequest
   undoRequested?: boolean
@@ -272,6 +274,42 @@ function pageStatusTool(currentQuestion: () => WorkspaceQuestion, action: PageSt
   })
 }
 
+function organizationTool(currentQuestion: () => WorkspaceQuestion, action: OrganizationRequest['action']) {
+  let prepared: { question: WorkspaceQuestion; plan: Awaited<ReturnType<typeof prepareOrganization>> } | undefined
+  return defineTool({
+    name: action === 'move' ? 'move_page' : 'copy_page',
+    description:
+      action === 'move'
+        ? 'Move a published page under a chosen parent in the same space. Use only for a direct request with an explicit destination link.'
+        : 'Copy a published page body into one new page in the same space. Use only for a direct request with an explicit destination link and new title.',
+    args: z.strictObject({}),
+    changesData,
+    preview: async (_args, signal) => {
+      prepared = undefined
+      const question = currentQuestion()
+      const request = question.organization
+      if (request?.action !== action)
+        refuse(
+          'Ask the user to specify the source page and parent link. Use Move this page under URL or Copy this page under URL as "TITLE".',
+        )
+      question.organization = undefined
+      const plan = await prepareOrganization(request, await question.tab, signal)
+      signal?.throwIfAborted()
+      if (currentQuestion() !== question) return undefined
+      prepared = { question, plan }
+      return plan.preview
+    },
+    run: async (_args, signal) => {
+      signal?.throwIfAborted()
+      const question = currentQuestion()
+      const ready = prepared
+      prepared = undefined
+      if (ready?.question !== question) refuse('Ask again to preview the source and destination.')
+      return applyWorkspaceChange(question, signal, () => applyOrganization(ready.plan, signal))
+    },
+  })
+}
+
 export function createTools(currentQuestion: () => WorkspaceQuestion) {
   const currentTab = () => currentQuestion().tab
   return [
@@ -363,5 +401,7 @@ export function createTools(currentQuestion: () => WorkspaceQuestion) {
       run: async (args, signal) => listPageComments(args, await currentTab(), signal),
     }),
     commentTool(currentQuestion),
+    organizationTool(currentQuestion, 'move'),
+    organizationTool(currentQuestion, 'copy'),
   ]
 }

@@ -56,6 +56,8 @@ The saved conversation keeps a local undo record for its latest verified text ed
 
 Discussions return bounded comment batches with stable links and parent comment IDs. A direct post binds its page, optional parent and quoted text before the model calls the tool. The tool previews the destination and text, rechecks the parent and reads the posted comment back. Only footer comments and replies to verified footer comments can be written.
 
+Page organization binds both page targets and the copy title to the request. Same-space reparenting checks for cycles and refuses to drop inherited read restrictions. A copy is a new single page using the source body and the destination's inherited access. Copy preflight checks source restrictions and attachment references. Both tools recheck the targets and verify the resulting ancestry and storage.
+
 ## Layout
 
 ```
