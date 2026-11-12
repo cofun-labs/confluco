@@ -11,6 +11,7 @@ Confluco opens an AI side panel on any website. This page describes what it read
 - **Page creation and renaming.** The requested title and any supplied plain text are part of the chat message. A creation sends these details and the chosen space and parent to Confluence. A rename sends the new title and existing published body back to Confluence as a versioned update. The model receives page links, titles and other result metadata such as space and version.
 - **Published page edits.** The quoted text and its replacement are part of the chat message. A direct edit request sends the revised published body and next version to the connected instance after a preview. The edit result includes the page reference and verification status.
 - **Undoing an edit.** A saved conversation can keep the last verified edit's page reference, version and quoted passages locally. An undo request reads the previous version from the connected instance and writes the restored body as a new version. The model receives the result metadata.
+- **Page organization.** A move or copy reads the source, destination and relevant restriction metadata from Confluence. It sends the target parent, title and storage body to Confluence. Restriction subjects and the copied storage are kept out of the tool result, which includes page links and result metadata.
 - **Your conversation.** Messages you type and the assistant's replies supply the context for the next question.
 - **Your sign-in session.** Clerk's Sync Host session cookies identify sign-in changes, and Clerk provides a short-lived session token for each Worker request.
 
@@ -25,7 +26,7 @@ The extension sends requests to these hosts and no others. The manifest's host p
 | `confluco-api.cofun.cc` (the Confluco Worker) | Clerk token, messages, relevant history, page title and canonical URL, assistant instructions and tool definitions and results, including requested Confluence page text, search, navigation, version, access, label and page write results | Model access |
 | `clerk.cofun.cc` (Clerk's Frontend API for the Cofun sign-in) | Clerk session and token requests | Account access and sign-in |
 | `img.clerk.com` | Avatar image requests | Account display |
-| User-connected Confluence base URL | Same-origin reads, search terms, space keys, page and parent IDs, version numbers, requested label changes, page titles and bodies for creation, rename and targeted edits, from the Confluence tab using that tab's session | Read, search and browse published pages, manage labels, create, rename and edit pages |
+| User-connected Confluence base URL | Same-origin reads, search terms, space keys, page and parent IDs, version numbers, requested label changes, page titles and bodies for creation, rename, targeted edits, moves and copies, from the Confluence tab using that tab's session | Read, search and browse published pages, manage labels, create, rename, edit, move and copy pages |
 
 The extension also holds a host permission for `*.cofun.cc`. Chrome reports a cookie only to an extension with permission for the cookie's domain, and Clerk sets the cookie that signals sign-in changes on the sign-in page's parent domain. The permission is used for that cookie access, and the extension sends no requests to any other host under `cofun.cc`.
 

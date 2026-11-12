@@ -21,6 +21,7 @@
 | History and labels | Inspect older page versions and available operations. View labels or ask to add or remove a named label on the current page. |
 | Create and rename pages | Publish a child page with optional plain text or rename a published page on the connected instance. |
 | Edit page text | Preview and apply a replacement for one exact text passage while preserving the surrounding content. |
+| Organize pages | Move a published page under a parent in the same space, or copy its body to a new page there. |
 | Stay in context | Each question includes the current supported Confluence page's title and URL. |
 | Draft | Work with text you provide in the conversation. |
 | Keep sessions | Save conversations locally, search by title, filter by starting page, and continue earlier chats. |
@@ -39,6 +40,7 @@ Confluence Cloud pages currently provide title and link context.
 7. To create a page, open its parent and ask `Create page "Release checklist" under this page with text "Verify the build."`. To rename a page, open it and ask `Rename this page to "Launch checklist"`. Use the page's canonical link ending in `/pages/viewpage.action?pageId=…` in place of `this page` to choose a different page on the same instance.
 8. To edit a published page, ask `Replace "Release pending" with "Release ready" on this page`. The quoted passage must occur once within a single text segment. If the page changed after the preview, review the current text and ask again.
 9. Ask `Undo the last operation` in the same conversation to reverse its latest verified text edit. The page must still be on the version saved by that edit.
+10. To move or copy a published page, ask `Move this page under URL` or `Copy this page under URL as "New title"`. Use the destination's canonical link in the same space. A move uses Confluence's child placement. Copies contain the body only and have independent history, comments and properties. For top-level moves, cross-space changes, exact sibling order, or copies with attachments, use Confluence's own controls.
 
 ## How it works
 

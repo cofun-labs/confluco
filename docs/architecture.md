@@ -52,6 +52,8 @@ Text edits bind the quoted passage and replacement to the user's current request
 
 The saved conversation keeps a local undo record for its most recent verified text edit. Before another workspace write starts, the panel clears the saved record so it cannot become stale if the conversation closes during the write. Undo checks the current version and reconstructs the original edit from the earlier storage before restoring that storage as a new version.
 
+Page organization binds both page targets and the copy title to the request. Same-space reparenting checks for cycles and refuses to drop inherited read restrictions. A copy is a new single page using the source body and the destination's inherited access. Copy preflight checks source restrictions and attachment references. Both tools recheck the targets and verify the resulting ancestry and storage.
+
 ## Layout
 
 ```

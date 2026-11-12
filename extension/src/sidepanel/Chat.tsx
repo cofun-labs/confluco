@@ -4,6 +4,7 @@ import { flushSync } from 'react-dom'
 import { CopilotAgent, MAY_HAVE_CHANGED, type AgentUpdate, type ConfirmTool, type HistoryMessage } from '../agent'
 import { getInstance } from '../confluence/instance'
 import { requestedLabelChanges } from '../confluence/labels'
+import { requestedOrganization } from '../confluence/page-organization'
 import {
   pageEditUndo,
   requestedPageEdit,
@@ -36,6 +37,7 @@ const SYSTEM_PROMPT =
   'Use create_page or rename_page only for a direct user request. Pass the exact quoted new title. For creation, the user must explicitly choose a parent. ' +
   'Use edit_page only for a direct text replacement request, for example Replace "OLD" with "NEW" on this page. It uses the quoted text from the request. ' +
   'For an explicit request to undo the last operation, use undo_page_edit. The tool checks the saved change and the current page. ' +
+  'Use move_page or copy_page only for a direct request with the same-space parent link, for example Move this page under URL or Copy this page under URL as "TITLE". ' +
   'For a target other than the current page, ask the user to include its canonical Confluence page link. ' +
   'Published page text can be read and discussed. Be concise.'
 
@@ -137,6 +139,7 @@ export function Chat({ userId }: { userId: string }) {
       labelChanges: requestedLabelChanges(text),
       pageWrite: requestedPageWrite(text),
       pageEdit: requestedPageEdit(text),
+      organization: requestedOrganization(text),
       undoRequested: requestedUndo(text),
       undo: current?.undo,
       beforeWrite: async () => {
