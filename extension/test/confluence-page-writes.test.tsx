@@ -323,7 +323,7 @@ describe('rename a published page', () => {
 })
 
 describe('edit published page text', () => {
-  const edit = 'Replace "Status A & B" with "Ready <today>" on this page'
+  const edit = 'Replace "Status A & B" with `QA\'s "ready" <today>` on this page'
   const editCall = { name: 'edit_page', arguments: '{}' }
   const preserved =
     '<ac:structured-macro ac:name="info"><ac:parameter ac:name="title">Status A &amp; B</ac:parameter>' +
@@ -332,16 +332,18 @@ describe('edit published page text', () => {
     '<td><ac:link><ri:user ri:userkey="synthetic-user" /></ac:link></td></tr></tbody></table>' +
     '<custom:tag attribute="a > b"><![CDATA[Status A & B <raw>]]></custom:tag>'
   const body = '<p>Prefix: Status A &#38; B. Keep &#160; suffix.</p>' + preserved
-  const expected = '<p>Prefix: Ready &lt;today&gt;. Keep &#160; suffix.</p>' + preserved
+  const expected = '<p>Prefix: QA\'s "ready" &lt;today&gt;. Keep &#160; suffix.</p>' + preserved
   const original = { ...parent, body: { storage: storage(body) } }
   const updated = { ...original, body: { storage: storage(expected) }, version: { number: 3 } }
 
-  it('[UC-CONFLUENCE-008-S01] previews and preserves exact surrounding storage after confirmation', async () => {
+  it('[UC-CONFLUENCE-008-S01] shows the edit before dispatch and preserves surrounding storage', async () => {
     const { browser, user } = await openPanel()
     let written = false
     browser.confluenceResponse = (url, init) => {
       expect(new URL(url).pathname).toBe(`${contentPath}/42`)
       if (init?.method === 'PUT') {
+        expect(screen.getByText(/Edit "Parent fixture".*version 2/)).toHaveTextContent('Before: "Status A & B"')
+        expect(screen.queryByRole('button', { name: 'Allow' })).not.toBeInTheDocument()
         written = true
         expect(init.body).toEqual(
           JSON.stringify({ type: 'page', title: original.title, version: { number: 3 }, body: updated.body }),
@@ -351,12 +353,6 @@ describe('edit published page text', () => {
     }
     browser.ai.script.push({ toolCalls: [editCall] }, { reply: 'The edit was verified.' })
     await ask(user, edit)
-    const allow = await screen.findByRole('button', { name: 'Allow' })
-    expect(screen.getByText(/Edit "Parent fixture".*version 2/)).toHaveTextContent(
-      'Before: "Status A & B" After: "Ready <today>"',
-    )
-    expect(writes(browser)).toEqual([])
-    await user.click(allow)
     expect(await screen.findByText('The edit was verified.')).toBeVisible()
     expect(writes(browser)).toHaveLength(1)
     expect(browser.workspaceRequests.at(-1)?.init?.method).toBe('GET')
@@ -379,29 +375,26 @@ describe('edit published page text', () => {
     expect(writes(browser)).toEqual([])
   })
 
-  it('[UC-CONFLUENCE-008-S02] does not repeat a declined edit during the same question', async () => {
+  it('refuses a replacement that would create a reserved storage sequence', async () => {
     const { browser, user } = await openPanel()
-    browser.confluenceResponse = () => Response.json(original)
-    browser.ai.script.push({ toolCalls: [editCall, editCall] })
-    await ask(user, edit)
-    await user.click(await screen.findByRole('button', { name: 'Deny' }))
+    browser.confluenceResponse = () => Response.json({ ...original, body: { storage: storage('<p>OLD> suffix</p>') } })
+    browser.ai.script.push({ toolCalls: [editCall] })
+    await ask(user, 'Replace "OLD" with "]]" on this page')
     await answered()
     expect(writes(browser)).toEqual([])
-    expect(screen.queryByRole('button', { name: 'Allow' })).not.toBeInTheDocument()
+    expect(screen.getAllByText(/reserved markup sequence/).length).toBeGreaterThan(0)
   })
 
   it.each([false, true])('[UC-CONFLUENCE-008-S03] protects newer content (server conflict %s)', async (conflict) => {
     const { browser, user } = await openPanel()
-    let newer = false
     browser.confluenceResponse = (_url, init) => {
       if (init?.method === 'PUT') return new Response(null, { status: 409 })
-      return Response.json(newer && !conflict ? { ...original, version: { number: 3 } } : original)
+      return Response.json(
+        browser.workspaceRequests.length > 1 && !conflict ? { ...original, version: { number: 3 } } : original,
+      )
     }
     browser.ai.script.push({ toolCalls: [editCall, editCall] })
     await ask(user, edit)
-    const allow = await screen.findByRole('button', { name: 'Allow' })
-    newer = true
-    await user.click(allow)
     await answered()
     expect(screen.getAllByText(conflict ? /has a newer version/ : /changed after the preview/).length).toBeGreaterThan(
       0,
@@ -421,11 +414,74 @@ describe('edit published page text', () => {
     }
     browser.ai.script.push({ toolCalls: [editCall] }, { reply: 'Verified after read-back.' })
     await ask(user, edit)
-    await user.click(await screen.findByRole('button', { name: 'Allow' }))
     await answered()
     expect(writes(browser)).toHaveLength(1)
     expect(browser.workspaceRequests.at(-1)?.init?.method).toBe('GET')
     if (applied) expect(modelResults(browser)).toContain('"recovered":true')
     else expect(screen.getAllByText(/resulting page could not be verified/).length).toBeGreaterThan(0)
   })
+
+  const undoCall = { name: 'undo_page_edit', arguments: '{}' }
+  const historical = { ...original, status: 'historical' }
+
+  it('[UC-CONFLUENCE-008-S06] undoes the last edit after reopening its conversation', async () => {
+    const { browser, user } = await openPanel()
+    let published = original
+    browser.confluenceResponse = (url, init) => {
+      const endpoint = new URL(url)
+      if (endpoint.searchParams.get('version') === '2') return Response.json(historical)
+      if (init?.method === 'PUT') {
+        if (published.version.number === 2) published = updated
+        else {
+          expect(screen.getByText(/Undo the edit on "Parent fixture".*version 3/)).toBeVisible()
+          expect(init.body).toEqual(
+            JSON.stringify({ type: 'page', title: original.title, version: { number: 4 }, body: original.body }),
+          )
+          published = { ...original, version: { number: 4 } }
+        }
+      }
+      return Response.json(published)
+    }
+    browser.ai.script.push({ toolCalls: [editCall] }, { reply: 'Edited the page.' })
+    await ask(user, edit)
+    await answered()
+    await user.click(screen.getByRole('button', { name: 'New chat' }))
+    await user.click(screen.getByRole('button', { name: 'Sessions' }))
+    await user.click(await screen.findByRole('button', { name: /Replace "Status A & B"/ }))
+    browser.ai.script.push({ toolCalls: [undoCall] })
+    await ask(user, 'Summarize this page')
+    await answered()
+    expect(screen.getAllByText(/explicitly request undoing/).length).toBeGreaterThan(0)
+    expect(writes(browser)).toHaveLength(1)
+    browser.ai.script.push({ toolCalls: [undoCall] }, { reply: 'Restored the previous text.' })
+    await ask(user, '撤销上次操作')
+    expect(await screen.findByText('Restored the previous text.')).toBeVisible()
+    expect(writes(browser)).toHaveLength(2)
+    expect(modelResults(browser)).toContain('"version":4,"changed":true,"bodyVerified":true')
+  })
+
+  it.each([false, true])(
+    '[UC-CONFLUENCE-008-S07] refuses undo without a matching current edit (newer %s)',
+    async (newer) => {
+      const { browser, user } = await openPanel()
+      let written = false
+      let bumped = false
+      browser.confluenceResponse = (_url, init) => {
+        if (init?.method === 'PUT') written = true
+        return Response.json(bumped ? { ...updated, version: { number: 4 } } : written ? updated : original)
+      }
+      if (newer) {
+        browser.ai.script.push({ toolCalls: [editCall] }, { reply: 'Edited the page.' })
+        await ask(user, edit)
+        await answered()
+        bumped = true
+      }
+      browser.ai.script.push({ toolCalls: [undoCall] })
+      await ask(user, 'Undo the last operation')
+      await answered()
+      const error = newer ? /page has changed since the last edit/ : /last workspace change.*can be undone/
+      expect(screen.getAllByText(error).length).toBeGreaterThan(0)
+      expect(writes(browser)).toHaveLength(newer ? 1 : 0)
+    },
+  )
 })

@@ -17,7 +17,9 @@ import {
   pageTitleArgs,
   preparePageEdit,
   preparePageWrite,
+  prepareUndoPageEdit,
   type PageEditRequest,
+  type PageEditUndo,
   type PageWriteRequest,
 } from './confluence/page-writes'
 import { readPage } from './confluence/read-page'
@@ -30,39 +32,73 @@ export interface WorkspaceQuestion {
   labelChanges: LabelRequest[]
   pageWrite?: PageWriteRequest
   pageEdit?: PageEditRequest
+  undoRequested?: boolean
+  undo?: PageEditUndo
 }
 
 const writeOutcome = z.object({ changed: z.boolean() })
 const changesData = (result: unknown) => writeOutcome.safeParse(result).data?.changed !== false
 
-function pageEditTool(currentQuestion: () => WorkspaceQuestion) {
-  let prepared: { question: WorkspaceQuestion; plan: Awaited<ReturnType<typeof preparePageEdit>> } | undefined
+async function applyWorkspaceChange<T>(question: WorkspaceQuestion, run: () => Promise<T>): Promise<T> {
+  try {
+    const result = await run()
+    if (changesData(result)) question.undo = undefined
+    return result
+  } catch (error) {
+    if (error instanceof Error && 'mayHaveChanged' in error && error.mayHaveChanged === true) question.undo = undefined
+    throw error
+  }
+}
+
+function pageEditTool(currentQuestion: () => WorkspaceQuestion, action: 'edit' | 'undo') {
+  let prepared:
+    | { question: WorkspaceQuestion; plan: Awaited<ReturnType<typeof preparePageEdit>>; edit?: PageEditRequest }
+    | undefined
   return defineTool({
-    name: 'edit_page',
+    name: action === 'edit' ? 'edit_page' : 'undo_page_edit',
     description:
-      'Preview and confirm a targeted text replacement on a published page. Use only for a direct request like Replace "OLD" with "NEW" on this page. The page and exact text come from the user message.',
+      action === 'edit'
+        ? 'Apply and verify a targeted text replacement on a published page. Use only for a direct request like Replace "OLD" with "NEW" on this page. The page and exact text come from the user message.'
+        : 'Undo the last verified page text edit in this conversation. Use only for an explicit request to undo the last operation. The target and prior text come from the saved edit.',
     args: z.strictObject({}),
-    needsConfirmation: true,
     changesData: true,
     preview: async (_args, signal) => {
       prepared = undefined
       const question = currentQuestion()
-      const request = question.pageEdit
-      if (!request) refuse('Ask the user to say Replace "OLD" with "NEW" on this page.')
-      question.pageEdit = undefined
-      const plan = await preparePageEdit(request, await question.tab, signal)
+      let plan: Awaited<ReturnType<typeof preparePageEdit>>
+      let edit: PageEditRequest | undefined
+      if (action === 'edit') {
+        edit = question.pageEdit
+        if (!edit) refuse('Ask the user to say Replace "OLD" with "NEW" on this page.')
+        question.pageEdit = undefined
+        plan = await preparePageEdit(edit, await question.tab, signal)
+      } else {
+        if (!question.undoRequested) refuse('Ask the user to explicitly request undoing the last operation.')
+        question.undoRequested = false
+        if (!question.undo)
+          refuse('The last workspace change in this conversation is not a verified text edit that can be undone.')
+        plan = await prepareUndoPageEdit(question.undo, await question.tab, signal)
+      }
       signal?.throwIfAborted()
       if (currentQuestion() !== question) return undefined
-      prepared = { question, plan }
+      prepared = { question, plan, edit }
       return plan.preview
     },
     run: async (_args, signal) => {
       signal?.throwIfAborted()
       const ready = prepared
       prepared = undefined
-      if (ready?.question !== currentQuestion())
-        throw new Error('Ask the user to say Replace "OLD" with "NEW" on this page.')
-      return applyPageEdit(ready.plan, signal)
+      const question = currentQuestion()
+      if (ready?.question !== question) refuse('Ask again to preview the intended page change.')
+      const result = await applyWorkspaceChange(question, () => applyPageEdit(ready.plan, signal))
+      if (ready.edit)
+        question.undo = {
+          page: result.page.ref,
+          version: result.version,
+          before: ready.edit.before,
+          after: ready.edit.after,
+        }
+      return result
     },
   })
 }
@@ -102,7 +138,7 @@ function pageWriteTool(currentQuestion: () => WorkspaceQuestion, action: PageWri
         throw new Error(`Only the user can request this page change. Ask them to say ${example} on the intended page.`)
       }
       question.pageWrite = undefined
-      return applyPageWrite(ready.plan, signal)
+      return applyWorkspaceChange(question, () => applyPageWrite(ready.plan, signal))
     },
   })
 }
@@ -181,11 +217,12 @@ export function createTools(currentQuestion: () => WorkspaceQuestion) {
             'Only the user can request a label change. Ask them to say “Add label NAME” or “Remove label NAME” on the intended page.',
           )
         question.labelChanges.shift()
-        return applyLabel(next, await question.tab, signal)
+        return applyWorkspaceChange(question, async () => applyLabel(next, await question.tab, signal))
       },
     }),
     pageWriteTool(currentQuestion, 'create'),
     pageWriteTool(currentQuestion, 'rename'),
-    pageEditTool(currentQuestion),
+    pageEditTool(currentQuestion, 'edit'),
+    pageEditTool(currentQuestion, 'undo'),
   ]
 }
