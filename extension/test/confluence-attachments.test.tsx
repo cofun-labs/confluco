@@ -156,6 +156,24 @@ it.each(['missing file', 'collision', 'target changed', 'declined', 'too large']
   },
 )
 
+it('[UC-CONFLUENCE-012-S03] refuses to replace an attachment that advanced after preview', async () => {
+  const { browser, user, selectFile } = await openPanel()
+  let version = 1
+  browser.confluenceResponse = (address) =>
+    address.startsWith(resource)
+      ? Response.json({ results: [{ ...attachment, version: { number: version } }] })
+      : Response.json(page)
+  await selectFile()
+  browser.ai.script.push({ toolCalls: [upload] })
+  await user.click(screen.getByRole('button', { name: 'Replace attachment' }))
+  const allow = await screen.findByRole('button', { name: /^Allow$/ })
+  version = 2
+  await user.click(allow)
+  await answered()
+  expect(screen.getAllByText(/attachment changed after the preview/).length).toBeGreaterThan(0)
+  expect(writes(browser)).toHaveLength(0)
+})
+
 it.each([
   [403, /does not have permission/],
   [503, /may have been applied/],
