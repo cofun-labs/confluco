@@ -1,4 +1,11 @@
 import {
+  applyAttachmentUpload,
+  attachmentsArgs,
+  listPageAttachments,
+  prepareAttachmentUpload,
+  type AttachmentUpload,
+} from './confluence/attachments'
+import {
   applyComment,
   commentsArgs,
   listPageComments,
@@ -446,10 +453,3 @@ export function createTools(currentQuestion: () => WorkspaceQuestion) {
     attachmentUploadTool(currentQuestion),
   ]
 }
-import {
-  applyAttachmentUpload,
-  attachmentsArgs,
-  listPageAttachments,
-  prepareAttachmentUpload,
-  type AttachmentUpload,
-} from './confluence/attachments'
