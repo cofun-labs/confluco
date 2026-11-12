@@ -331,6 +331,9 @@ describe('edit published page text', () => {
     '<table><tbody><tr><td><ac:link><ri:attachment ri:filename="guide.pdf" /></ac:link></td>' +
     '<td><ac:link><ri:user ri:userkey="synthetic-user" /></ac:link></td></tr></tbody></table>' +
     '<custom:tag attribute="a > b"><![CDATA[Status A & B <raw>]]></custom:tag>'
+  const tasks =
+    '<ac:task-list><ac:task><ac:task-id>19</ac:task-id><ac:task-uuid>fixture-id</ac:task-uuid>' +
+    '<ac:task-status>incomplete</ac:task-status><ac:task-body>Check the release</ac:task-body></ac:task></ac:task-list>'
   const body = '<p>Prefix: Status A &#38; B. Keep &#160; suffix.</p>' + preserved
   const expected = "<p>Prefix: QA's &quot;ready&quot; &lt;today&gt;. Keep &#160; suffix.</p>" + preserved
   const original = { ...parent, body: { storage: storage(body) } }
@@ -363,6 +366,7 @@ describe('edit published page text', () => {
   it.each([
     [edit, body + '<p>Status A &amp; B</p>', /appears more than once/],
     [edit, '<p>Status <em>A &amp; B</em></p>', /not found in one editable text segment/],
+    ['Replace "incomplete" with "complete" on this page', tasks, /not found in one editable text segment/],
     ['Summarize this page', body, /Ask the user to say Replace/],
   ])('[UC-CONFLUENCE-008-S02] refuses unapproved or ambiguous edits from %s', async (message, value, reason) => {
     const { browser, user } = await openPanel()

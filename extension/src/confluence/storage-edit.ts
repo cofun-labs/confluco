@@ -1,6 +1,20 @@
 import { refuse } from './transport'
 
 const escaped: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }
+const textContainers = new Set([
+  'ac:inline-comment-marker',
+  'ac:layout',
+  'ac:layout-cell',
+  'ac:layout-section',
+  'ac:link',
+  'ac:link-body',
+  'ac:rich-text-body',
+  'ac:structured-macro',
+  'ac:task',
+  'ac:task-body',
+  'ac:task-list',
+])
+const inertTags = new Set(['script', 'style', 'template', 'textarea', 'noscript', 'iframe', 'object'])
 
 // Use offsets into the original storage. Serializing the document would also rewrite unrelated markup.
 function textOffsets(raw: string, text: string, decoder: HTMLTextAreaElement) {
@@ -72,10 +86,9 @@ export function replaceStorageText(storage: string, text: string, replacement: s
     if (closing) {
       if (selfClosing || stack.pop()?.name !== name) refuse('This page contains unbalanced storage markup.')
     } else if (!selfClosing) {
-      const protectedText =
-        /^(?:ri:|(?:ac:(?:parameter|plain-text-body)|script|style|template|textarea|noscript|iframe|object)$)/i.test(
-          name,
-        )
+      // Namespaced elements can hold metadata, even when their contents look like plain text.
+      const lower = name.toLowerCase()
+      const protectedText = inertTags.has(lower) || (lower.includes(':') && !textContainers.has(lower))
       stack.push({ name, protected: protectedText || stack.at(-1)?.protected === true })
     }
     cursor = tag.lastIndex
