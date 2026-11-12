@@ -94,7 +94,7 @@ export function requestedPageWrite(message: string): PageWriteRequest | undefine
   return { action: 'create', title: name.data, targetUrl, spaceKey, text: match.text?.slice(1, -1) ?? '' }
 }
 
-function requestedReference(tab: ConfluenceTab, target: string | undefined): PageReference | undefined {
+export function requestedReference(tab: ConfluenceTab, target: string | undefined): PageReference | undefined {
   if (!target) return undefined
   const url = URL.parse(target)
   if (!url) refuse('Use a published page link from the connected Confluence instance.')

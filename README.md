@@ -21,6 +21,7 @@
 | History and labels | Inspect older page versions and available operations. View labels or ask to add or remove a named label on the current page. |
 | Create and rename pages | Publish a child page with optional plain text or rename a published page on the connected instance. |
 | Edit page text | Preview and apply a replacement for one exact text passage while preserving the surrounding content. |
+| Trash and restore pages | Move an eligible published page to the recoverable trash or restore a trashed page by its link. |
 | Stay in context | Each question includes the current supported Confluence page's title and URL. |
 | Draft | Work with text you provide in the conversation. |
 | Keep sessions | Save conversations locally, search by title, filter by starting page, and continue earlier chats. |
@@ -38,7 +39,8 @@ Confluence Cloud pages currently provide title and link context.
 6. To change a label, open the intended published page and ask _Add label release-ready_ or _Remove label release-ready_.
 7. To create a page, open its parent and ask `Create page "Release checklist" under this page with text "Verify the build."`. To rename a page, open it and ask `Rename this page to "Launch checklist"`. Use the page's canonical link ending in `/pages/viewpage.action?pageId=…` in place of `this page` to choose a different page on the same instance.
 8. To edit a published page, ask `Replace "Release pending" with "Release ready" on this page`. The quoted passage must occur once within a single text segment. If the page changed after the preview, review the current text and ask again.
-9. Ask `Undo the last operation` in the same conversation to reverse its latest verified text edit. The page must still be on the version saved by that edit.
+9. Open an unrestricted published child page with no children and ask `Trash this page` to move it to the recoverable trash. To restore a page by its canonical link, stay on the connected site, ask `Restore page URL` and review the access warning. Confluence restores the page to the space root.
+10. Ask `Undo the last operation` in the same conversation to reverse its latest verified text edit or trash action while the page still matches that operation.
 
 ## How it works
 

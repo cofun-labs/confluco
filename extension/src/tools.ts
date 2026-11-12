@@ -14,14 +14,15 @@ import {
   applyPageEdit,
   applyPageWrite,
   describePageWrite,
+  pageEditUndo,
   pageTitleArgs,
   preparePageEdit,
   preparePageWrite,
   prepareUndoPageEdit,
   type PageEditRequest,
-  type PageEditUndo,
   type PageWriteRequest,
 } from './confluence/page-writes'
+import { applyPageStatus, pageTrashUndo, preparePageStatus, type PageStatusRequest } from './confluence/page-status'
 import { readPage } from './confluence/read-page'
 import { refuse, type ConfluenceTab } from './confluence/transport'
 import { defineTool } from './tool'
@@ -32,10 +33,14 @@ export interface WorkspaceQuestion {
   labelChanges: LabelRequest[]
   pageWrite?: PageWriteRequest
   pageEdit?: PageEditRequest
+  pageStatus?: PageStatusRequest
   undoRequested?: boolean
-  undo?: PageEditUndo
+  undo?: WorkspaceUndo
   beforeWrite?: () => Promise<void>
 }
+
+export const workspaceUndo = z.union([pageEditUndo, pageTrashUndo])
+export type WorkspaceUndo = z.output<typeof workspaceUndo>
 
 const writeOutcome = z.object({ changed: z.boolean() })
 const changesData = (result: unknown) => writeOutcome.safeParse(result).data?.changed !== false
@@ -82,7 +87,7 @@ function pageEditTool(currentQuestion: () => WorkspaceQuestion, action: 'edit' |
       } else {
         if (!question.undoRequested) refuse('Ask the user to explicitly request undoing the last operation.')
         question.undoRequested = false
-        if (!question.undo)
+        if (!question.undo || 'kind' in question.undo)
           refuse('The last workspace change in this conversation is not a verified text edit that can be undone.')
         plan = await prepareUndoPageEdit(question.undo, await question.tab, signal)
       }
@@ -146,6 +151,58 @@ function pageWriteTool(currentQuestion: () => WorkspaceQuestion, action: PageWri
       }
       question.pageWrite = undefined
       return applyWorkspaceChange(question, signal, () => applyPageWrite(ready.plan, signal))
+    },
+  })
+}
+
+function pageStatusTool(currentQuestion: () => WorkspaceQuestion, action: PageStatusRequest['action'] | 'undo') {
+  let prepared: { question: WorkspaceQuestion; plan: Awaited<ReturnType<typeof preparePageStatus>> } | undefined
+  return defineTool({
+    name: action === 'trash' ? 'trash_page' : action === 'restore' ? 'restore_page' : 'undo_page_trash',
+    description:
+      action === 'trash'
+        ? 'Move an explicitly requested published page to recoverable trash. Use only for a direct request such as Trash this page.'
+        : action === 'restore'
+          ? 'Restore a trashed page specified by the user by link. Confluence restores it at the space root.'
+          : 'Undo the latest verified page trash action in this conversation. Use only for an explicit undo request.',
+    needsConfirmation: action === 'restore',
+    args: z.strictObject({}),
+    changesData,
+    preview: async (_args, signal) => {
+      prepared = undefined
+      const question = currentQuestion()
+      const direct = question.pageStatus
+      const undo =
+        action === 'undo' && question.undoRequested && question.undo && 'kind' in question.undo
+          ? question.undo
+          : undefined
+      if (action === 'undo' && !undo)
+        refuse('The last workspace change in this conversation is not a verified trash action.')
+      if (action !== 'undo' && direct?.action !== action)
+        refuse('Ask the user to specify the page to trash or provide the link of the page to restore.')
+      question.pageStatus = undefined
+      question.undoRequested = false
+      const plan = await preparePageStatus(
+        { action: action === 'undo' ? 'restore' : action, targetUrl: direct?.targetUrl },
+        await question.tab,
+        signal,
+        undo,
+      )
+      signal?.throwIfAborted()
+      if (currentQuestion() !== question) return undefined
+      prepared = { question, plan }
+      return plan.preview
+    },
+    run: async (_args, signal) => {
+      signal?.throwIfAborted()
+      const question = currentQuestion()
+      const ready = prepared
+      prepared = undefined
+      if (ready?.question !== question) refuse('Ask again to preview the intended page.')
+      const result = await applyWorkspaceChange(question, signal, () => applyPageStatus(ready.plan, signal))
+      if (result.changed && result.status === 'trashed')
+        question.undo = { kind: 'trash', page: result.page.ref, version: result.version }
+      return result
     },
   })
 }
@@ -231,5 +288,8 @@ export function createTools(currentQuestion: () => WorkspaceQuestion) {
     pageWriteTool(currentQuestion, 'rename'),
     pageEditTool(currentQuestion, 'edit'),
     pageEditTool(currentQuestion, 'undo'),
+    pageStatusTool(currentQuestion, 'trash'),
+    pageStatusTool(currentQuestion, 'restore'),
+    pageStatusTool(currentQuestion, 'undo'),
   ]
 }

@@ -64,6 +64,159 @@ const modelResults = (browser: FakeBrowser) =>
     .map(({ content }) => content)
     .join('\n')
 
+describe('trash and restore a published page', () => {
+  const trash = { name: 'trash_page', arguments: '{}' }
+  const restore = { name: 'restore_page', arguments: '{}' }
+  const undoTrash = { name: 'undo_page_trash', arguments: '{}' }
+  const trashed = { ...parent, status: 'trashed', ancestors: [] }
+  const restored = { ...parent, ancestors: [] }
+  const empty = { results: [] }
+  const unrestricted = { restrictions: { user: empty, group: empty } }
+  const restoreCommand = 'Restore page ' + pageUrl(parent.id)
+  const usePage = (browser: FakeBrowser, initial = parent) => {
+    let page = initial
+    browser.confluenceResponse = (url, init) => {
+      const endpoint = new URL(url)
+      if (endpoint.pathname.endsWith('/child/page')) return Response.json(empty)
+      if (endpoint.pathname.endsWith('/restriction/byOperation'))
+        return Response.json({ read: unrestricted, update: unrestricted })
+      expect(endpoint.pathname).toBe(contentPath + '/42')
+      if (init?.method === 'DELETE') {
+        expect(screen.getByText(/Move "Parent fixture".*to the recoverable trash/)).toBeVisible()
+        expect(screen.queryByRole('img', { name: 'Waiting for your OK' })).not.toBeInTheDocument()
+        expect(endpoint.search).toBe('?status=current')
+        page = trashed
+        return new Response(null, { status: 204 })
+      }
+      if (init?.method === 'PUT') {
+        expect(screen.getByText(/Restore "Parent fixture".*from the trash/)).toBeVisible()
+        expect(screen.queryByRole('img', { name: 'Waiting for your OK' })).not.toBeInTheDocument()
+        expect(endpoint.search).toBe('?status=trashed')
+        expect(init.body).toBe(JSON.stringify({ id: '42', status: 'current', version: { number: 3 } }))
+        page = restored
+      } else expect(endpoint.searchParams.get('status')).toBe('any')
+      return Response.json(page)
+    }
+  }
+
+  it('[UC-CONFLUENCE-011-S01] previews the page and verifies recoverable trash after dispatch', async () => {
+    const { browser, user } = await openPanel()
+    usePage(browser)
+    browser.ai.script.push({ toolCalls: [trash] }, { reply: 'Trashed and verified.' })
+    await ask(user, 'Trash this page')
+    expect(await screen.findByText('Trashed and verified.')).toBeVisible()
+    expect(writes(browser)).toHaveLength(1)
+    expect(modelResults(browser)).toContain('"status":"trashed","version":2,"changed":true')
+    expect(browser.workspaceRequests.at(-1)?.init?.method).toBe('GET')
+  })
+
+  it.each([false, true])('[UC-CONFLUENCE-011-S02] restores the same page (undo %s)', async (undo) => {
+    const { browser, user } = await openPanel()
+    usePage(browser, undo ? parent : trashed)
+    if (undo) {
+      browser.ai.script.push({ toolCalls: [trash] }, { reply: 'Moved to trash.' })
+      await ask(user, 'Trash this page')
+      await answered()
+      await user.click(screen.getByRole('button', { name: 'New chat' }))
+      await user.click(screen.getByRole('button', { name: 'Sessions' }))
+      await user.click(await screen.findByRole('button', { name: /Trash this page/ }))
+    }
+    browser.ai.script.push({ toolCalls: [undo ? undoTrash : restore] }, { reply: 'The same page is published again.' })
+    await ask(user, undo ? '撤销上次操作' : restoreCommand)
+    if (!undo) await user.click(await screen.findByRole('button', { name: /^Allow$/ }))
+    expect(await screen.findByText('The same page is published again.')).toBeVisible()
+    expect(writes(browser)).toHaveLength(undo ? 2 : 1)
+    expect(modelResults(browser)).toContain('"status":"current","version":2,"changed":true,"atSpaceRoot":true')
+    expect(browser.workspaceRequests.at(-1)?.init?.method).toBe('GET')
+  })
+
+  it('[UC-CONFLUENCE-011-S03] leaves a page trashed if the user declines restoration by link', async () => {
+    const { browser, user } = await openPanel()
+    usePage(browser, trashed)
+    browser.ai.script.push({ toolCalls: [restore] }, { reply: 'The page is still in the trash.' })
+    await ask(user, restoreCommand)
+    expect(await screen.findByText(/Review who can access the page there/)).toBeVisible()
+    expect(writes(browser)).toEqual([])
+    await user.click(await screen.findByRole('button', { name: /^Deny$/ }))
+    expect(await screen.findByText('The page is still in the trash.')).toBeVisible()
+    expect(writes(browser)).toEqual([])
+  })
+
+  it.each([
+    ['Trash this page', trash, trashed, false, false, /"changed":false/],
+    [restoreCommand, restore, parent, false, false, /"changed":false/],
+    ['Trash this page', trash, { ...parent, ancestors: [] }, false, false, /top-level pages/],
+    ['Trash this page', trash, parent, true, false, /child pages/],
+    ['Trash this page', trash, parent, false, false, /could lose an access restriction/],
+    ['Trash this page', trash, parent, false, true, /permission/i],
+    ['Trash this page', trash, { ...parent, id: '99' }, false, false, /expected published or trashed page/],
+    [
+      'Restore page https://other.example.test/pages/viewpage.action?pageId=42',
+      restore,
+      trashed,
+      false,
+      false,
+      /same|connected/i,
+    ],
+    ['Permanently delete this page', trash, parent, false, false, /specify the page to trash/],
+  ])(
+    '[UC-CONFLUENCE-011-S03] does not change the wrong or ineligible page (%s, %j)',
+    async (message, call, page, hasChildren, denied, reason) => {
+      const { browser, user } = await openPanel()
+      browser.confluenceResponse = (url, init) => {
+        if (init?.method === 'DELETE' && denied) return new Response(null, { status: 403 })
+        if (new URL(url).pathname.endsWith('/child/page'))
+          return Response.json({ results: hasChildren ? [{ id: '99' }] : [] })
+        if (new URL(url).pathname.endsWith('/restriction/byOperation'))
+          return Response.json({
+            read: {
+              restrictions: {
+                user: { results: !denied && reason.source.includes('access restriction') ? [{}] : [] },
+                group: empty,
+              },
+            },
+            update: unrestricted,
+          })
+        return Response.json(page)
+      }
+      browser.ai.script.push({ toolCalls: [call] }, { reply: 'The page already has the requested state.' })
+      await ask(user, message)
+      if (call === restore && message === restoreCommand)
+        await user.click(await screen.findByRole('button', { name: /^Allow$/ }))
+      await answered()
+      if ((page.status === 'trashed' && call === trash) || (page.status === 'current' && message === restoreCommand)) {
+        expect(modelResults(browser)).toMatch(reason)
+      } else expect(screen.getAllByText(reason).length).toBeGreaterThan(0)
+      expect(writes(browser)).toHaveLength(denied ? 1 : 0)
+    },
+  )
+
+  it.each([false, true])('[UC-CONFLUENCE-011-S04] verifies uncertainty once (restoring %s)', async (restoring) => {
+    const { browser, user } = await openPanel()
+    let readsAfterWrite = 0
+    let attempted = false
+    browser.confluenceResponse = (url, init) => {
+      if (init?.method === 'DELETE' || init?.method === 'PUT') {
+        attempted = true
+        return new Response(null, { status: 503 })
+      }
+      if (attempted) readsAfterWrite++
+      if (new URL(url).pathname.endsWith('/child/page')) return Response.json(empty)
+      if (new URL(url).pathname.endsWith('/restriction/byOperation'))
+        return Response.json({ read: unrestricted, update: unrestricted })
+      return Response.json(restoring ? trashed : parent)
+    }
+    const call = restoring ? restore : trash
+    browser.ai.script.push({ toolCalls: [call, call] })
+    await ask(user, restoring ? restoreCommand : 'Trash this page')
+    if (restoring) await user.click(await screen.findByRole('button', { name: /^Allow$/ }))
+    await answered()
+    expect(writes(browser)).toHaveLength(1)
+    expect(readsAfterWrite).toBe(1)
+    expect(screen.getAllByText(/page state may have changed/).length).toBeGreaterThan(0)
+  })
+})
+
 describe('create a published page', () => {
   it('[UC-CONFLUENCE-006-S01] shows the chosen parent and verifies the published child', async () => {
     const { browser, user } = await openPanel()
