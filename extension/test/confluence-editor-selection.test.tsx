@@ -61,13 +61,19 @@ it.each([
   expect(browser.workspaceRequests).toEqual([])
 })
 
-it.each(['removed', 'tab changed'])('[UC-CONFLUENCE-013-S03] omits a selection that was %s', async (scenario) => {
-  const { browser, user, attach, send } = await openPanel()
-  await attach()
-  await screen.findByRole('region', { name: 'Selected editor text' })
-  if (scenario === 'removed') await user.click(screen.getByRole('button', { name: 'Remove selection' }))
-  else browser.selectTab({ ...editor, id: 2, url: base + '/pages/editpage.action?pageId=84' })
-  await send()
-  expect(JSON.stringify(browser.sentToModel())).not.toContain(selected)
-  expect(browser.workspaceRequests).toEqual([])
-})
+it.each(['removed', 'tab changed', 'editor reloaded'])(
+  '[UC-CONFLUENCE-013-S03] omits a selection that was %s',
+  async (scenario) => {
+    const { browser, user, attach, send } = await openPanel()
+    await attach()
+    await screen.findByRole('region', { name: 'Selected editor text' })
+    if (scenario === 'removed') await user.click(screen.getByRole('button', { name: 'Remove selection' }))
+    else if (scenario === 'tab changed')
+      browser.selectTab({ ...editor, id: 2, url: base + '/pages/editpage.action?pageId=84' })
+    else browser.selectTab({ ...editor, documentId: 'reloaded-editor' })
+    await send()
+    if (scenario !== 'removed') expect(screen.getByRole('status')).toHaveTextContent('active Confluence editor changed')
+    expect(JSON.stringify(browser.sentToModel())).not.toContain(selected)
+    expect(browser.workspaceRequests).toEqual([])
+  },
+)

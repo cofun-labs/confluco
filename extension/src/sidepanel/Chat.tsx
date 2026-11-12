@@ -9,7 +9,7 @@ import { requestedOrganization } from '../confluence/page-organization'
 import { requestedPageStatus } from '../confluence/page-status'
 import { requestedPageEdit, requestedPageWrite, requestedUndo } from '../confluence/page-writes'
 import { activeTab, openPageNote, tabPage } from '../confluence/tab'
-import { confluenceTab, readEditorSelection } from '../confluence/transport'
+import { confluenceTab, isEditorSelectionCurrent, readEditorSelection } from '../confluence/transport'
 import { SessionStore, titleFor, type Session } from '../sessions'
 import { createTools, workspaceUndo, type WorkspaceQuestion, type WorkspaceUndo } from '../tools'
 import { ConfluenceConnection } from './ConfluenceConnection'
@@ -174,12 +174,13 @@ export function Chat({ userId }: { userId: string }) {
     questionPage.current = page
     clearSelection()
     questionSelection.current = selection
-      ? target.then((bound) => {
+      ? target.then(async (bound) => {
           if (
             bound?.tabId === selection.tab.tabId &&
             bound.url === selection.tab.url &&
             bound.instance.path === selection.tab.instance.path &&
-            bound.instance.origin === selection.tab.instance.origin
+            bound.instance.origin === selection.tab.instance.origin &&
+            (await isEditorSelectionCurrent(bound, selection.documentId))
           )
             return selection
           if (chatId.current === id)

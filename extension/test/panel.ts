@@ -19,7 +19,14 @@ export const START = new Date('2026-11-08T12:00:00Z')
 const globals = globalThis as Record<string, unknown>
 const realFetch = globalThis.fetch
 export const PAGE_URL = 'https://team.atlassian.net/wiki/spaces/ENG/pages/123/Fixture+page?tracking=local'
-type TestTab = { id?: number; title?: string; url?: string; meta?: string; editorSelection?: string }
+type TestTab = {
+  id?: number
+  title?: string
+  url?: string
+  meta?: string
+  editorSelection?: string
+  documentId?: string
+}
 type Injection = { target: { tabId: number }; func: (...args: never[]) => unknown; args: unknown[] }
 // jsdom lays nothing out, so it has no scrolling; the panel scrolls its messages to the newest one.
 Element.prototype.scrollTo ??= () => {}
@@ -107,7 +114,7 @@ export class FakeBrowser {
       `(${func.toString()})(...args)`,
       Object.assign(world, { args: injectedArgs }),
     )
-    return [{ result }]
+    return [{ result, documentId: tab.documentId ?? String(target.tabId) }]
   }
 
   /** Starts a browser on `tab`, signed in to Copilot as `signedInAs` or signed out. */

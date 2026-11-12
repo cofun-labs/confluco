@@ -107,13 +107,33 @@ export async function readEditorSelection(target: ConfluenceTab | undefined) {
   if (!parsed.success) refuse('Confluence did not return the expected editor selection.')
   switch (parsed.data.kind) {
     case 'selection':
-      return { tab, text: parsed.data.text, truncated: parsed.data.truncated }
+      if (!frame?.documentId) refuse('Confluco could not identify the editor document.')
+      return { tab, documentId: frame.documentId, text: parsed.data.text, truncated: parsed.data.truncated }
     case 'changed':
       refuse('The active tab changed. Select text in the intended editor and try again.')
     case 'not-editor':
       refuse('Open a supported Confluence editor and select text in the page body.')
     case 'empty':
       refuse('Select text in the Confluence editor before attaching it.')
+  }
+}
+
+export async function isEditorSelectionCurrent(tab: ConfluenceTab, documentId: string): Promise<boolean> {
+  try {
+    if (!(await chrome.permissions.contains({ origins: [tab.instance.permission] }))) return false
+    const [frame] = await chrome.scripting.executeScript({
+      target: { tabId: tab.tabId },
+      world: 'ISOLATED',
+      func: (expectedUrl: string) => {
+        const current = new URL(location.href)
+        current.hash = ''
+        return current.href === expectedUrl
+      },
+      args: [tab.url],
+    })
+    return frame?.documentId === documentId && frame.result === true
+  } catch {
+    return false
   }
 }
 
