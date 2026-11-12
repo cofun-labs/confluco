@@ -118,11 +118,16 @@ export function writeConfluenceLabel(target: ConfluenceTab, id: string, write: L
   )
 }
 
-export function createConfluencePage(target: ConfluenceTab, body: unknown, signal?: AbortSignal) {
+export function createConfluenceContent<T extends { type: 'page' | 'comment' }>(
+  target: ConfluenceTab,
+  body: T,
+  signal?: AbortSignal,
+) {
   return sendConfluence(
     target,
     { area: 'api', resource: 'content', method: 'POST', query: {}, body: JSON.stringify(body) },
     signal,
+    body.type === 'comment' ? 'Confluence rejected the comment. Check the page and reply target.' : undefined,
   )
 }
 
@@ -134,7 +139,7 @@ export function updateConfluencePage(target: ConfluenceTab, id: string, body: un
   )
 }
 
-async function sendConfluence(target: ConfluenceTab, request: RestRequest, signal?: AbortSignal) {
+async function sendConfluence(target: ConfluenceTab, request: RestRequest, signal?: AbortSignal, rejection?: string) {
   signal?.throwIfAborted()
   if (!(await chrome.permissions.contains({ origins: [target.instance.permission] }))) {
     refuse('Confluco needs Chrome site access. Reconnect this Confluence instance and try again.')
@@ -187,6 +192,7 @@ async function sendConfluence(target: ConfluenceTab, request: RestRequest, signa
   if (response.data.kind !== 'ok') {
     const { kind } = response.data
     if (writing && ['auth', 'large', 'network', 'invalid'].includes(kind)) uncertain()
+    if (kind === 'rejected' && rejection) refuse(rejection)
     if (
       kind === 'rejected' &&
       (request.method === 'PUT' || (request.method === 'POST' && request.resource === 'content'))

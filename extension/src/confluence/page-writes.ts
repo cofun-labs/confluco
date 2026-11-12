@@ -10,7 +10,7 @@ import {
 } from './references'
 import { replaceStorageText } from './storage-edit'
 import {
-  createConfluencePage,
+  createConfluenceContent,
   getConfluence,
   refuse,
   requireTab,
@@ -94,7 +94,7 @@ export function requestedPageWrite(message: string): PageWriteRequest | undefine
   return { action: 'create', title: name.data, targetUrl, spaceKey, text: match.text?.slice(1, -1) ?? '' }
 }
 
-function requestedReference(tab: ConfluenceTab, target: string | undefined): PageReference | undefined {
+export function requestedReference(tab: ConfluenceTab, target: string | undefined): PageReference | undefined {
   if (!target) return undefined
   const url = URL.parse(target)
   if (!url) refuse('Use a published page link from the connected Confluence instance.')
@@ -159,7 +159,7 @@ export function describePageWrite(plan: PreparedCreate | PreparedRename): string
 
 const entities: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }
 
-function plainTextStorage(text: string): string {
+export function plainTextStorage(text: string): string {
   return text
     .replace(/\r\n?/g, '\n')
     .split(/\n\n+/)
@@ -337,7 +337,7 @@ export async function applyPageWrite(plan: PreparedCreate | PreparedRename, sign
     if (parent.id !== target.id || parent.space.key !== target.space.key)
       refuse('The chosen parent changed. Ask again on the intended page.')
     const value = plainTextStorage(plan.request.text)
-    const response = await createConfluencePage(
+    const response = await createConfluenceContent(
       tab,
       {
         type: 'page',

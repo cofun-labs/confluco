@@ -2,6 +2,7 @@ import { useAuth } from '@clerk/chrome-extension'
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { flushSync } from 'react-dom'
 import { CopilotAgent, MAY_HAVE_CHANGED, type AgentUpdate, type ConfirmTool, type HistoryMessage } from '../agent'
+import { requestedComment } from '../confluence/comments'
 import { getInstance } from '../confluence/instance'
 import { requestedLabelChanges } from '../confluence/labels'
 import {
@@ -36,6 +37,7 @@ const SYSTEM_PROMPT =
   'Use create_page or rename_page only for a direct user request. Pass the exact quoted new title. For creation, the user must explicitly choose a parent. ' +
   'Use edit_page only for a direct text replacement request, for example Replace "OLD" with "NEW" on this page. It uses the quoted text from the request. ' +
   'For an explicit request to undo the last operation, use undo_page_edit. The tool checks the saved change and the current page. ' +
+  'Use list_page_comments to read discussions. For a direct request Add comment "TEXT" on this page or Reply to comment ID with "TEXT" on this page, use add_page_comment. ' +
   'For a target other than the current page, ask the user to include its canonical Confluence page link. ' +
   'Published page text can be read and discussed. Be concise.'
 
@@ -137,6 +139,7 @@ export function Chat({ userId }: { userId: string }) {
       labelChanges: requestedLabelChanges(text),
       pageWrite: requestedPageWrite(text),
       pageEdit: requestedPageEdit(text),
+      comment: requestedComment(text),
       undoRequested: requestedUndo(text),
       undo: current?.undo,
       beforeWrite: async () => {

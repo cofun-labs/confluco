@@ -52,6 +52,8 @@ Text edits bind the quoted passage and replacement to the user's current request
 
 The saved conversation keeps a local undo record for its most recent verified text edit. Before another workspace write starts, the panel clears the saved record so it cannot become stale if the conversation closes during the write. Undo checks the current version and reconstructs the original edit from the earlier storage before restoring that storage as a new version.
 
+Discussions return bounded comment batches with stable links and parent comment IDs. A direct post binds its page, optional parent and quoted text before the model calls the tool. The tool previews the destination and text, rechecks the parent and reads the posted comment back. Only footer comments and replies to verified footer comments can be written.
+
 ## Layout
 
 ```
