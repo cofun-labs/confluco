@@ -68,7 +68,14 @@ describe('published page discussions', () => {
       expect(target.searchParams.get('limit')).toBe('10')
       expect(target.searchParams.get('depth')).toBe('all')
       return Response.json({
-        results: [root, { ...reply, extensions: { location: 'inline' } }],
+        results: [
+          root,
+          {
+            ...reply,
+            ancestors: [...reply.ancestors, { id: '70', type: 'comment' }],
+            extensions: { location: 'inline' },
+          },
+        ],
         _links: { next: '/rest/api/content/42/child/comment?start=2&limit=10' },
       })
     }
@@ -86,10 +93,12 @@ describe('published page discussions', () => {
     '[UC-CONFLUENCE-009-S02] previews and verifies the intended thread (reply %s)',
     async (isReply) => {
       const { browser, user } = await openPanel()
+      const text = 'QA & <note>\n\nNext line'
+      const submittedBody = body('<p>QA &amp; &lt;note&gt;<br /><br />Next line</p>')
       const posted = {
         ...reply,
         ancestors: isReply ? reply.ancestors : [],
-        body: body('<p>QA &amp; &lt;note&gt;</p>'),
+        body: body('<p>QA &amp; &lt;note&gt;<br/><br/>Next line</p>'),
       }
       browser.confluenceResponse = (url, init) => {
         const target = new URL(url)
@@ -99,14 +108,14 @@ describe('published page discussions', () => {
             screen.getByText(
               isReply ? /Reply to comment 71 on "Discussion fixture"/ : /Add a footer comment to "Discussion fixture"/,
             ),
-          ).toHaveTextContent('Comment: "QA & <note>"')
+          ).toHaveTextContent('Comment: ' + JSON.stringify(text))
           expect(screen.queryByRole('button', { name: 'Allow' })).not.toBeInTheDocument()
           expect(init.body).toBe(
             JSON.stringify({
               type: 'comment',
               container: { id: page.id, type: 'page' },
               ...(isReply && { ancestors: reply.ancestors }),
-              body: posted.body,
+              body: submittedBody,
             }),
           )
           return Response.json(posted)
@@ -116,10 +125,11 @@ describe('published page discussions', () => {
         return Response.json(page)
       }
       browser.ai.script.push({ toolCalls: [add] }, { reply: 'Posted and verified.' })
-      await ask(
-        user,
-        isReply ? 'Reply to comment 71 with "QA & <note>" on this page' : 'Add comment "QA & <note>" on this page',
+      await user.click(screen.getByRole('textbox', { name: 'Message' }))
+      await user.paste(
+        isReply ? `Reply to comment 71 with "${text}" on this page` : `Add comment "${text}" on this page`,
       )
+      await user.click(screen.getByRole('button', { name: 'Send' }))
       await answered()
       expect(results(browser)).toContain(pageUrl + '&focusedCommentId=72#comment-72')
       expect(writes(browser)).toHaveLength(1)
@@ -152,17 +162,37 @@ describe('published page discussions', () => {
     },
   )
 
+  it('[UC-CONFLUENCE-009-S03] reports a server permission denial', async () => {
+    const { browser, user } = await openPanel()
+    browser.confluenceResponse = (_url, init) =>
+      init?.method === 'POST' ? new Response(null, { status: 403 }) : Response.json(page)
+    browser.ai.script.push({ toolCalls: [add, add] })
+    await ask(user, 'Add comment "QA" on this page')
+    await answered()
+    expect(screen.getAllByText(/does not have permission/).length).toBeGreaterThan(0)
+    expect(writes(browser)).toHaveLength(1)
+  })
+
   it.each([
-    [403, /does not have permission/],
-    [503, /change may have been applied/],
+    [503, '', /change may have been applied/],
+    [200, '<p>QA note<img src="test.png" /></p>', /comment may have been posted/],
+    [200, '<p>QA note</p>', /comment may have been posted/],
   ])(
-    '[UC-CONFLUENCE-009-S03] [UC-CONFLUENCE-009-S04] stops a denied or uncertain post (%s)',
-    async (status, reason) => {
+    '[UC-CONFLUENCE-009-S04] stops without another post when the result is uncertain (%s, %s)',
+    async (status, storage, reason) => {
       const { browser, user } = await openPanel()
-      browser.confluenceResponse = (_url, init) =>
-        init?.method === 'POST' ? new Response(null, { status }) : Response.json(page)
+      browser.confluenceResponse = (url, init) => {
+        if (init?.method === 'POST') {
+          expect(init.body).toContain('<p>QA<br /><br />note</p>')
+          return status === 200 ? Response.json(root) : new Response(null, { status })
+        }
+        if (new URL(url).pathname.endsWith('/71')) return Response.json({ ...root, body: body(storage) })
+        return Response.json(page)
+      }
       browser.ai.script.push({ toolCalls: [add, add] })
-      await ask(user, 'Add comment "QA" on this page')
+      await user.click(screen.getByRole('textbox', { name: 'Message' }))
+      await user.paste('Add comment "QA\n\nnote" on this page')
+      await user.click(screen.getByRole('button', { name: 'Send' }))
       await answered()
       expect(screen.getAllByText(reason).length).toBeGreaterThan(0)
       expect(writes(browser)).toHaveLength(1)

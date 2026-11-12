@@ -1,6 +1,6 @@
 import { z } from '../zod'
 import { collection, collectionStart } from './collection'
-import { plainTextStorage, requestedReference } from './page-writes'
+import { requestedReference } from './page-writes'
 import { readableText } from './readable-text'
 import { fetchPublishedPage, pageLink, pageReference, publishedPage } from './references'
 import { createConfluenceContent, getConfluence, refuse, requireTab, type ConfluenceTab } from './transport'
@@ -16,6 +16,19 @@ const comment = commentIdentity.extend({
 })
 const fields = 'ancestors,container,body.storage,history,extensions.inlineProperties'
 const textLimit = 2000
+const escaped: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }
+
+function commentStorage(text: string): string {
+  return '<p>' + text.replace(/[&<>"]/g, (character) => escaped[character]).replace(/\n/g, '<br />') + '</p>'
+}
+
+function matchesCommentText(value: string, text: string): boolean {
+  // Only the plain-text paragraph and line breaks we wrote can appear in a verified comment.
+  if (!/^<p>(?:[^<]|<br\s*\/?>)*<\/p>$/u.test(value)) return false
+  const template = document.createElement('template')
+  template.innerHTML = value.slice(3, -4).replace(/<br\s*\/?>/g, '\n')
+  return template.content.textContent === text
+}
 
 export const commentsArgs = z.strictObject({
   page: pageReference.optional().describe('Omit to use the current published page.'),
@@ -31,7 +44,7 @@ export interface CommentRequest {
 const addEnglish =
   /^(?:please\s+)?(?:add|post)\s+(?:a\s+)?(?:footer\s+)?comment\s+(?<text>"[^"]+"|“[^”]+”|`[^`]+`)\s+(?:on|to)\s+(?:this\s+page|(?<target>https?:\/\/[^\s]+?))[.!]?$/iu
 const replyEnglish =
-  /^(?:please\s+)?reply\s+to\s+comment\s+(?<parent>\d{1,20})\s+with\s+(?<text>"[^"]+"|“[^”]+”|`[^`]+`)\s+on\s+(?:this\s+page|(?<target>https?:\/\/[^\s]+?))[.!]?$/iu
+  /^(?:please\s+)?reply\s+to\s+comment\s+(?<parent>\d{1,20})\s+with\s+(?<text>"[^"]+"|“[^”]+”|`[^`]+`)\s+(?:on|to)\s+(?:this\s+page|(?<target>https?:\/\/[^\s]+?))[.!]?$/iu
 const commentChinese =
   /^(?:请\s*)?在(?:当前页面?|本页|这页)(?:上)?\s*(?:评论|添加评论|回复评论\s*(?<parent>\d{1,20})\s*[：:]?)\s*(?<text>"[^"]+"|“[^”]+”|`[^`]+`)[。！!]?$/u
 
@@ -39,7 +52,7 @@ export function requestedComment(message: string): CommentRequest | undefined {
   const input = message.trim()
   const match = (addEnglish.exec(input) ?? replyEnglish.exec(input) ?? commentChinese.exec(input))?.groups
   if (!match) return undefined
-  return { text: match.text.slice(1, -1), targetUrl: match.target, parentId: match.parent }
+  return { text: match.text.slice(1, -1).replace(/\r\n?/g, '\n'), targetUrl: match.target, parentId: match.parent }
 }
 
 function location(value: z.output<typeof comment>): 'footer' | 'inline' | 'unknown' {
@@ -52,7 +65,7 @@ function summary(pageUrl: string, value: z.output<typeof comment>) {
   return {
     id: value.id,
     url: `${pageUrl}&focusedCommentId=${value.id}#comment-${value.id}`,
-    parentId: value.ancestors.at(-1)?.id ?? null,
+    parentId: value.ancestors[0]?.id ?? null,
     location: location(value),
     author: value.history?.createdBy?.displayName,
     text: text.slice(0, textLimit),
@@ -117,7 +130,7 @@ export async function applyComment(plan: Awaited<ReturnType<typeof prepareCommen
     if (location(currentParent) !== 'footer' || currentParent.body.storage.value !== parent.body.storage.value)
       refuse('The parent comment changed after the preview. Review it and ask again.')
   }
-  const value = plainTextStorage(request.text)
+  const value = commentStorage(request.text)
   const created = await createConfluenceContent(
     tab,
     {
@@ -138,8 +151,8 @@ export async function applyComment(plan: Awaited<ReturnType<typeof prepareCommen
   }
   if (
     location(verified) !== 'footer' ||
-    verified.ancestors.at(-1)?.id !== parent?.id ||
-    readableText(verified.body.storage.value) !== readableText(value)
+    verified.ancestors[0]?.id !== parent?.id ||
+    !matchesCommentText(verified.body.storage.value, request.text)
   )
     unverified()
   const { text: _text, ...result } = summary(link.url, verified)
