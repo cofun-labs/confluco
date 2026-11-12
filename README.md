@@ -62,4 +62,4 @@ Confluco is an independent project and is not endorsed by Atlassian.
 
 ## License
 
-Copyright 2026 Cofun Labs. The code is licensed under the [Apache License 2.0](LICENSE). The license does not cover the Confluco and Cofun names or their icons.
+Copyright 2026 Cofun Labs. The code is licensed under the [Apache License 2.0](LICENSE). It grants no rights to the Confluco and Cofun names and logos as trademarks.
